@@ -4,6 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:livekit_client/livekit_client.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
+import '../../../../core/services/audio_service.dart';
 import '../../../../core/network/socket_provider.dart';
 import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
@@ -73,10 +76,15 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     } else {
       _setupSocketListeners();
     }
+
+    // Pause background lobby music during active match
+    AudioService.instance.pauseBgm();
   }
 
   @override
   void dispose() {
+    // Resume background lobby music when leaving match
+    AudioService.instance.resumeBgm();
     _lkRoom?.disconnect();
     _lkRoom?.dispose();
     _diceController.dispose();
@@ -542,12 +550,20 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     }
   }
 
-  // --- Sound Effects Player Emulator ---
+  // --- Sound Effects Playback Service ---
 
   void _playSfx(String type) {
     if (!LocalStorage.isSfxEnabled()) return;
-    // Log sound to verify triggers
-    print('[SFX PLAYED] -> ludo_sound_$type.wav');
+    // Call the actual audio service triggers
+    if (type == 'roll') {
+      AudioService.instance.playDiceRoll();
+    } else if (type == 'move') {
+      AudioService.instance.playPawnMove();
+    } else if (type == 'capture') {
+      AudioService.instance.playPawnCapture();
+    } else if (type == 'goal') {
+      AudioService.instance.playGoalReached();
+    }
   }
 
   void _addHistoryMessage(String text) {
@@ -559,6 +575,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   // --- Voice & Chat Toggles ---
 
   void _toggleVoiceChat() async {
+    AudioService.instance.playButtonClick();
     if (_isVoiceConnected && _lkRoom != null) {
       setState(() {
         _isVoiceMuted = !_isVoiceMuted;
@@ -578,6 +595,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   void _sendChatMessage() {
     final text = _chatController.text.trim();
     if (text.isEmpty) return;
+    AudioService.instance.playButtonClick();
 
     if (_isOffline) {
       setState(() {
@@ -607,6 +625,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   }
 
   void _triggerLocalEmojiReaction(String emojiId) {
+    AudioService.instance.playButtonClick();
     final myColor = _getLocalPlayerColor();
     if (_isOffline) {
       _triggerEmojiReaction(myColor, emojiId);
@@ -653,64 +672,125 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   // --- Modals ---
 
   void _showWinnerDialog(String winnerName, String winnerColor) {
+    // Play win or lose sound based on outcome
+    final myColor = _getLocalPlayerColor();
+    if (winnerColor == myColor) {
+      AudioService.instance.playWin();
+    } else {
+      AudioService.instance.playLose();
+    }
+
     showDialog(
       context: context,
       barrierDismissible: false,
       builder: (context) => Dialog(
         backgroundColor: Colors.transparent,
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.primary, width: 2),
-            boxShadow: const [
-              BoxShadow(color: Colors.black54, blurRadius: 20),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const Icon(Icons.emoji_events, size: 80, color: AppColors.gold)
-                  .animate()
-                  .scale(duration: 800.ms, curve: Curves.bounceOut),
-              const SizedBox(height: 16),
-              Text(
-                'MATCH COMPLETED',
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: AppColors.textSecondary, letterSpacing: 2),
+        child: Stack(
+          alignment: Alignment.center,
+          children: [
+            Container(
+              margin: const EdgeInsets.only(top: 30),
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(28),
+                border: Border.all(color: AppColors.accentNeon.withOpacity(0.5), width: 2),
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.accentNeon.withOpacity(0.15),
+                    blurRadius: 25,
+                    spreadRadius: 2,
+                  ),
+                ],
               ),
-              const SizedBox(height: 8),
-              Text(
-                '$winnerName WON!',
-                style: TextStyle(
-                  fontWeight: FontWeight.bold, 
-                  fontSize: 26, 
-                  color: winnerColor == 'Red'
-                      ? AppColors.ludoRed
-                      : winnerColor == 'Green'
-                          ? AppColors.ludoGreen
-                          : winnerColor == 'Yellow'
-                              ? AppColors.ludoYellow
-                              : AppColors.ludoBlue,
-                  fontFamily: 'Outfit',
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 36),
+                  const Text(
+                    'MATCH COMPLETED',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 3,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    winnerColor == myColor ? 'VICTORY!' : 'DEFEAT!',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 28,
+                      color: winnerColor == myColor ? AppColors.ludoGreen : AppColors.ludoRed,
+                      letterSpacing: 2,
+                      shadows: [
+                        Shadow(
+                          color: (winnerColor == myColor ? AppColors.ludoGreen : AppColors.ludoRed).withOpacity(0.5),
+                          blurRadius: 10,
+                        )
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    '$winnerName is the Champion',
+                    style: const TextStyle(fontSize: 14, color: Colors.white70),
+                  ),
+                  const SizedBox(height: 20),
+                  Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.black26,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      winnerColor == myColor
+                          ? 'Winnings (+300 XP, Gold Prize Pool) credited to user wallet.'
+                          : 'Rank Rating Adjusted. Better luck next time!',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  ElevatedButton(
+                    onPressed: () {
+                      AudioService.instance.playButtonClick();
+                      Navigator.pop(context); // Close dialog
+                      context.go('/home');
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: winnerColor == myColor ? AppColors.ludoGreen : AppColors.primary,
+                      shadowColor: (winnerColor == myColor ? AppColors.ludoGreen : AppColors.primary).withOpacity(0.4),
+                    ),
+                    child: const Text('BACK TO LOBBY'),
+                  ),
+                ],
+              ),
+            ),
+            
+            // Lottie Confetti Burst Animation positioned to rain over the dialog
+            Positioned(
+              top: 0,
+              child: SizedBox(
+                width: 320,
+                height: 300,
+                child: Lottie.network(
+                  'https://assets10.lottiefiles.com/packages/lf20_vu9jxpmo.json',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    // Fallback animated icon if network is offline
+                    return const Icon(
+                      Icons.emoji_events_rounded,
+                      size: 76,
+                      color: AppColors.gold,
+                    ).animate(onPlay: (c) => c.repeat(reverse: true))
+                     .scale(begin: const Offset(1, 1), end: const Offset(1.15, 1.15), duration: 1.seconds);
+                  },
                 ),
               ),
-              const SizedBox(height: 16),
-              const Text(
-                'Winnings (+300 XP, Gold Prize Pool) credited to user wallet.',
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 12, color: AppColors.textMuted),
-              ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: () {
-                  Navigator.pop(context); // Close dialog
-                  context.go('/home');
-                },
-                child: const Text('BACK TO LOBBY'),
-              ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -738,6 +818,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         leading: IconButton(
           icon: const Icon(Icons.exit_to_app_rounded),
           onPressed: () {
+            AudioService.instance.playButtonClick();
             // Confirm quit dialog
             showDialog(
               context: context,
@@ -745,9 +826,16 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                 title: const Text('Abandon Match?'),
                 content: const Text('Quitting this match counts as a forfeit. Entry fee coins will not be returned.'),
                 actions: [
-                  TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Resume')),
+                  TextButton(
+                    onPressed: () {
+                      AudioService.instance.playButtonClick();
+                      Navigator.pop(ctx);
+                    },
+                    child: const Text('Resume'),
+                  ),
                   ElevatedButton(
                     onPressed: () {
+                      AudioService.instance.playButtonClick();
                       Navigator.pop(ctx);
                       context.go('/home');
                     },
@@ -774,7 +862,10 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
           Builder(
             builder: (ctx) => IconButton(
               icon: const Icon(Icons.chat_bubble_outline_rounded),
-              onPressed: () => Scaffold.of(ctx).openEndDrawer(),
+              onPressed: () {
+                AudioService.instance.playButtonClick();
+                Scaffold.of(ctx).openEndDrawer();
+              },
             ),
           )
         ],
@@ -890,48 +981,89 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final String avatar = pInfo?['avatar'] ?? 'https://api.dicebear.com/7.x/pixel-art/png?seed=$color';
 
     final Color colorVal = color == 'Red'
-        ? AppColors.ludoRed
+        ? AppColors.tokenRed
         : color == 'Green'
-            ? AppColors.ludoGreen
+            ? AppColors.tokenGreen
             : color == 'Yellow'
-                ? AppColors.ludoYellow
-                : AppColors.ludoBlue;
+                ? AppColors.tokenYellow
+                : AppColors.tokenBlue;
 
-    return Column(
-      children: [
-        Stack(
-          alignment: Alignment.center,
-          children: [
-            if (isTurn)
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      decoration: BoxDecoration(
+        color: isTurn ? colorVal.withOpacity(0.1) : Colors.transparent,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: isTurn ? colorVal.withOpacity(0.3) : Colors.transparent,
+          width: 1.5,
+        ),
+      ),
+      child: Column(
+        children: [
+          Stack(
+            alignment: Alignment.center,
+            children: [
+              if (isTurn)
+                Container(
+                  width: 58,
+                  height: 58,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    border: Border.all(color: colorVal, width: 2.5),
+                    boxShadow: [
+                      BoxShadow(color: colorVal.withOpacity(0.4), blurRadius: 10, spreadRadius: 2),
+                    ],
+                  ),
+                ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.12, 1.12), duration: 600.ms),
+              
+              // Frame around avatar
               Container(
-                width: 58,
-                height: 58,
+                padding: const EdgeInsets.all(2),
                 decoration: BoxDecoration(
                   shape: BoxShape.circle,
-                  border: Border.all(color: colorVal, width: 3),
-                  boxShadow: [
-                    BoxShadow(color: colorVal.withOpacity(0.3), blurRadius: 10, spreadRadius: 2),
-                  ],
+                  color: AppColors.cardBg,
+                  border: Border.all(color: isTurn ? Colors.white : colorVal.withOpacity(0.5), width: 1.5),
                 ),
-              ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 600.ms),
-            CircleAvatar(
-              radius: 24,
-              backgroundColor: AppColors.surface,
-              backgroundImage: NetworkImage(avatar),
-            ),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Text(
-          name, 
-          style: TextStyle(
-            fontSize: 11, 
-            fontWeight: isTurn ? FontWeight.bold : FontWeight.normal,
-            color: isTurn ? Colors.white : AppColors.textSecondary,
+                child: CircleAvatar(
+                  radius: 22,
+                  backgroundColor: AppColors.surface,
+                  backgroundImage: NetworkImage(avatar),
+                ),
+              ),
+              
+              // Level Badge overlay
+              Positioned(
+                bottom: -2,
+                right: -2,
+                child: Container(
+                  padding: const EdgeInsets.all(3),
+                  decoration: BoxDecoration(
+                    color: colorVal,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1),
+                  ),
+                  child: const Icon(
+                    Icons.star_rounded,
+                    size: 10,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ],
           ),
-          overflow: TextOverflow.ellipsis,
-        ),
-      ],
+          const SizedBox(height: 8),
+          Text(
+            name, 
+            style: GoogleFonts.outfit(
+              fontSize: 12, 
+              fontWeight: isTurn ? FontWeight.bold : FontWeight.w500,
+              color: isTurn ? Colors.white : AppColors.textSecondary,
+              letterSpacing: 0.5,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
     );
   }
 
@@ -1111,20 +1243,31 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final isMyTurn = _isLocalPlayerTurn();
 
     final Color activeColorVal = _activeColor == 'Red'
-        ? AppColors.ludoRed
+        ? AppColors.tokenRed
         : _activeColor == 'Green'
-            ? AppColors.ludoGreen
+            ? AppColors.tokenGreen
             : _activeColor == 'Yellow'
-                ? AppColors.ludoYellow
-                : AppColors.ludoBlue;
+                ? AppColors.tokenYellow
+                : AppColors.tokenBlue;
 
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16),
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: AppColors.surface,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isMyTurn ? activeColorVal : const Color(0xFF334155), width: 1.5),
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isMyTurn ? activeColorVal.withOpacity(0.6) : const Color(0xFF26324A),
+          width: 1.5,
+        ),
+        boxShadow: [
+          if (isMyTurn)
+            BoxShadow(
+              color: activeColorVal.withOpacity(0.12),
+              blurRadius: 12,
+              spreadRadius: 1,
+            ),
+        ],
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1136,20 +1279,19 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
               children: [
                 Text(
                   isMyTurn ? 'YOUR TURN' : '${_activeColor.toUpperCase()}\'S TURN',
-                  style: TextStyle(
+                  style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold, 
-                    fontSize: 15, 
+                    fontSize: 16, 
                     color: activeColorVal,
-                    fontFamily: 'Outfit',
-                    letterSpacing: 1,
+                    letterSpacing: 1.2,
                   ),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   _rollState == 'idle' 
-                      ? 'Roll the dice to advance' 
-                      : 'Select highlighted pawn to move',
-                  style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
+                      ? 'Tap the dice to roll and advance' 
+                      : 'Select a highlighted pawn on the board',
+                  style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -1169,27 +1311,32 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       boxShadow: [
-                        BoxShadow(color: activeColorVal.withOpacity(0.3), blurRadius: 15, spreadRadius: 3),
+                        BoxShadow(color: activeColorVal.withOpacity(0.35), blurRadius: 16, spreadRadius: 3),
                       ],
                     ),
-                  ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.15, 1.15), duration: 500.ms),
+                  ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.18, 1.18), duration: 500.ms),
                 
-                // Dice body
+                // Dice body (Metallic 3D look with bevel)
                 Container(
-                  width: 56,
-                  height: 56,
+                  width: 58,
+                  height: 58,
                   decoration: BoxDecoration(
                     color: activeColorVal,
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: const [
-                      BoxShadow(color: Colors.black26, blurRadius: 5, offset: Offset(0, 3)),
+                    borderRadius: BorderRadius.circular(14),
+                    boxShadow: [
+                      const BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(2, 4)),
+                      BoxShadow(color: activeColorVal.withOpacity(0.5), blurRadius: 8, offset: const Offset(-1, -1)),
                     ],
                     gradient: LinearGradient(
-                      colors: [activeColorVal, activeColorVal.withOpacity(0.8)],
+                      colors: [
+                        activeColorVal.withOpacity(0.9),
+                        activeColorVal,
+                        activeColorVal.withOpacity(0.7)
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    border: Border.all(color: Colors.white38, width: 2),
+                    border: Border.all(color: Colors.white.withOpacity(0.4), width: 2.2),
                   ),
                   child: Center(
                     child: AnimatedBuilder(
@@ -1214,7 +1361,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
 
   Widget _buildDiceFaceContent() {
     if (_diceValue == null) {
-      return const Icon(Icons.casino_rounded, size: 28, color: Colors.white);
+      return const Icon(Icons.casino_rounded, size: 30, color: Colors.white);
     }
     
     // Dot matrices representing Ludo dice faces
@@ -1222,28 +1369,28 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       case 1:
         return _buildDiceDots([const Alignment(0, 0)]);
       case 2:
-        return _buildDiceDots([const Alignment(-0.6, -0.6), const Alignment(0.6, 0.6)]);
+        return _buildDiceDots([const Alignment(-0.55, -0.55), const Alignment(0.55, 0.55)]);
       case 3:
-        return _buildDiceDots([const Alignment(-0.6, -0.6), const Alignment(0, 0), const Alignment(0.6, 0.6)]);
+        return _buildDiceDots([const Alignment(-0.55, -0.55), const Alignment(0, 0), const Alignment(0.55, 0.55)]);
       case 4:
         return _buildDiceDots([
-          const Alignment(-0.6, -0.6), const Alignment(0.6, -0.6),
-          const Alignment(-0.6, 0.6), const Alignment(0.6, 0.6)
+          const Alignment(-0.55, -0.55), const Alignment(0.55, -0.55),
+          const Alignment(-0.55, 0.55), const Alignment(0.55, 0.55)
         ]);
       case 5:
         return _buildDiceDots([
-          const Alignment(-0.6, -0.6), const Alignment(0.6, -0.6),
+          const Alignment(-0.55, -0.55), const Alignment(0.55, -0.55),
           const Alignment(0, 0),
-          const Alignment(-0.6, 0.6), const Alignment(0.6, 0.6)
+          const Alignment(-0.55, 0.55), const Alignment(0.55, 0.55)
         ]);
       case 6:
         return _buildDiceDots([
-          const Alignment(-0.6, -0.6), const Alignment(0.6, -0.6),
-          const Alignment(-0.6, 0), const Alignment(0.6, 0),
-          const Alignment(-0.6, 0.6), const Alignment(0.6, 0.6)
+          const Alignment(-0.55, -0.55), const Alignment(0.55, -0.55),
+          const Alignment(-0.55, 0), const Alignment(0.55, 0),
+          const Alignment(-0.55, 0.55), const Alignment(0.55, 0.55)
         ]);
       default:
-        return const Icon(Icons.casino, size: 28, color: Colors.white);
+        return const Icon(Icons.casino, size: 30, color: Colors.white);
     }
   }
 
@@ -1253,11 +1400,22 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         return Align(
           alignment: align,
           child: Container(
-            width: 8,
-            height: 8,
-            decoration: const BoxDecoration(
+            width: 9,
+            height: 9,
+            decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: Colors.white,
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black54,
+                  blurRadius: 1.5,
+                  offset: Offset(1, 1),
+                ),
+              ],
+              gradient: RadialGradient(
+                colors: [Colors.white, Colors.grey.shade300],
+                stops: const [0.3, 1.0],
+              ),
             ),
           ),
         );
@@ -1381,66 +1539,76 @@ class LudoBoardPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     final double stepSize = size.width / 15;
 
-    // Set paint styles
-    final Paint fillRed = Paint()..color = AppColors.ludoRed;
-    final Paint fillGreen = Paint()..color = AppColors.ludoGreen;
-    final Paint fillYellow = Paint()..color = AppColors.ludoYellow;
-    final Paint fillBlue = Paint()..color = AppColors.ludoBlue;
+    // Define colors & gradients
+    final Color colorRed = AppColors.tokenRed;
+    final Color colorGreen = AppColors.tokenGreen;
+    final Color colorYellow = AppColors.tokenYellow;
+    final Color colorBlue = AppColors.tokenBlue;
+
     final Paint borderPaint = Paint()
-      ..color = const Color(0xFF1E293B)
+      ..color = const Color(0xFF2E3B5E)
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
+      ..strokeWidth = 1.2;
 
-    final Paint pathBackPaint = Paint()..color = const Color(0xFFE2E8F0);
+    final Paint cellBackPaint = Paint()..color = const Color(0xFF131929);
 
-    // 1. Draw 15x15 basic grid outline
+    // 1. Draw basic board background grid
     for (int col = 0; col < 15; col++) {
       for (int row = 0; row < 15; row++) {
-        final rect = Rect.fromLTWH(col * stepSize, row * stepSize, stepSize, stepSize);
-        canvas.drawRect(rect, pathBackPaint);
-        canvas.drawRect(rect, borderPaint);
+        canvas.drawRect(Rect.fromLTWH(col * stepSize, row * stepSize, stepSize, stepSize), cellBackPaint);
+        canvas.drawRect(Rect.fromLTWH(col * stepSize, row * stepSize, stepSize, stepSize), borderPaint);
       }
     }
 
-    // 2. Draw 4 primary quadrant bases (Yards)
-    canvas.drawRect(Rect.fromLTWH(0, 0, stepSize * 6, stepSize * 6), fillRed);
-    canvas.drawRect(Rect.fromLTWH(stepSize * 9, 0, stepSize * 6, stepSize * 6), fillGreen);
-    canvas.drawRect(Rect.fromLTWH(stepSize * 9, stepSize * 9, stepSize * 6, stepSize * 6), fillYellow);
-    canvas.drawRect(Rect.fromLTWH(0, stepSize * 9, stepSize * 6, stepSize * 6), fillBlue);
+    // Function to draw gradients
+    void drawGradientRect(Rect rect, Color baseColor) {
+      final Paint paint = Paint()
+        ..shader = LinearGradient(
+          colors: [baseColor, baseColor.withOpacity(0.65)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ).createShader(rect);
+      canvas.drawRRect(RRect.fromRectAndRadius(rect, const Radius.circular(8)), paint);
+    }
 
-    // 3. Draw yard inner white panels
-    _drawInnerYardPanel(canvas, 1 * stepSize, 1 * stepSize, stepSize * 4);
-    _drawInnerYardPanel(canvas, 10 * stepSize, 1 * stepSize, stepSize * 4);
-    _drawInnerYardPanel(canvas, 10 * stepSize, 10 * stepSize, stepSize * 4);
-    _drawInnerYardPanel(canvas, 1 * stepSize, 10 * stepSize, stepSize * 4);
+    // 2. Draw 4 primary quadrant bases (Yards) with gradients & round corners
+    drawGradientRect(Rect.fromLTWH(0, 0, stepSize * 6, stepSize * 6), colorRed);
+    drawGradientRect(Rect.fromLTWH(stepSize * 9, 0, stepSize * 6, stepSize * 6), colorGreen);
+    drawGradientRect(Rect.fromLTWH(stepSize * 9, stepSize * 9, stepSize * 6, stepSize * 6), colorYellow);
+    drawGradientRect(Rect.fromLTWH(0, stepSize * 9, stepSize * 6, stepSize * 6), colorBlue);
 
-    // 4. Highlight path start/home stretch tracks
-    // Red home stretch (row 7, col 1-5) & starting cell (row 6, col 1)
+    // 3. Draw yard inner white panels with subtle neon trim
+    _drawInnerYardPanel(canvas, 1 * stepSize, 1 * stepSize, stepSize * 4, colorRed);
+    _drawInnerYardPanel(canvas, 10 * stepSize, 1 * stepSize, stepSize * 4, colorGreen);
+    _drawInnerYardPanel(canvas, 10 * stepSize, 10 * stepSize, stepSize * 4, colorYellow);
+    _drawInnerYardPanel(canvas, 1 * stepSize, 10 * stepSize, stepSize * 4, colorBlue);
+
+    // 4. Highlight path start / home stretch tracks
+    // Red home stretch & starting cell
     for (int i = 1; i <= 5; i++) {
-      canvas.drawRect(Rect.fromLTWH(i * stepSize, 7 * stepSize, stepSize, stepSize), fillRed);
+      drawGradientRect(Rect.fromLTWH(i * stepSize, 7 * stepSize, stepSize, stepSize), colorRed);
     }
-    canvas.drawRect(Rect.fromLTWH(1 * stepSize, 6 * stepSize, stepSize, stepSize), fillRed);
+    drawGradientRect(Rect.fromLTWH(1 * stepSize, 6 * stepSize, stepSize, stepSize), colorRed);
 
-    // Green home stretch (col 7, row 1-5) & starting cell (row 1, col 8)
+    // Green home stretch & starting cell
     for (int i = 1; i <= 5; i++) {
-      canvas.drawRect(Rect.fromLTWH(7 * stepSize, i * stepSize, stepSize, stepSize), fillGreen);
+      drawGradientRect(Rect.fromLTWH(7 * stepSize, i * stepSize, stepSize, stepSize), colorGreen);
     }
-    canvas.drawRect(Rect.fromLTWH(8 * stepSize, 1 * stepSize, stepSize, stepSize), fillGreen);
+    drawGradientRect(Rect.fromLTWH(8 * stepSize, 1 * stepSize, stepSize, stepSize), colorGreen);
 
-    // Yellow home stretch (row 7, col 9-13) & starting cell (row 8, col 13)
+    // Yellow home stretch & starting cell
     for (int i = 9; i <= 13; i++) {
-      canvas.drawRect(Rect.fromLTWH(i * stepSize, 7 * stepSize, stepSize, stepSize), fillYellow);
+      drawGradientRect(Rect.fromLTWH(i * stepSize, 7 * stepSize, stepSize, stepSize), colorYellow);
     }
-    canvas.drawRect(Rect.fromLTWH(13 * stepSize, 8 * stepSize, stepSize, stepSize), fillYellow);
+    drawGradientRect(Rect.fromLTWH(13 * stepSize, 8 * stepSize, stepSize, stepSize), colorYellow);
 
-    // Blue home stretch (col 7, row 9-13) & starting cell (row 13, col 6)
+    // Blue home stretch & starting cell
     for (int i = 9; i <= 13; i++) {
-      canvas.drawRect(Rect.fromLTWH(7 * stepSize, i * stepSize, stepSize, stepSize), fillBlue);
+      drawGradientRect(Rect.fromLTWH(7 * stepSize, i * stepSize, stepSize, stepSize), colorBlue);
     }
-    canvas.drawRect(Rect.fromLTWH(6 * stepSize, 13 * stepSize, stepSize, stepSize), fillBlue);
+    drawGradientRect(Rect.fromLTWH(6 * stepSize, 13 * stepSize, stepSize, stepSize), colorBlue);
 
-    // 5. Draw safety Star stars
-    // Stars at: (6,2), (8,6), (12,8), (6,12), (8,2), (13,8), (2,6), (8,12)
+    // 5. Draw safety Star stars (glowing gold)
     _drawStar(canvas, 2 * stepSize, 6 * stepSize, stepSize);
     _drawStar(canvas, 8 * stepSize, 2 * stepSize, stepSize);
     _drawStar(canvas, 12 * stepSize, 8 * stepSize, stepSize);
@@ -1452,58 +1620,94 @@ class LudoBoardPainter extends CustomPainter {
     _drawStar(canvas, 6 * stepSize, 6 * stepSize, stepSize);
 
     // 6. Draw Center Goal triangles
+    final centerRect = Rect.fromLTWH(6 * stepSize, 6 * stepSize, stepSize * 3, stepSize * 3);
+    
+    void drawTriangle(Path path, Color baseColor) {
+      final Paint paint = Paint()
+        ..shader = RadialGradient(
+          colors: [baseColor.withOpacity(0.95), baseColor.withOpacity(0.4)],
+        ).createShader(centerRect);
+      canvas.drawPath(path, paint);
+      canvas.drawPath(path, borderPaint);
+    }
+
     final Path redTriangle = Path()
       ..moveTo(6 * stepSize, 6 * stepSize)
       ..lineTo(7.5 * stepSize, 7.5 * stepSize)
       ..lineTo(6 * stepSize, 9 * stepSize)
       ..close();
-    canvas.drawPath(redTriangle, fillRed);
+    drawTriangle(redTriangle, colorRed);
 
     final Path greenTriangle = Path()
       ..moveTo(6 * stepSize, 6 * stepSize)
       ..lineTo(7.5 * stepSize, 7.5 * stepSize)
       ..lineTo(9 * stepSize, 6 * stepSize)
       ..close();
-    canvas.drawPath(greenTriangle, fillGreen);
+    drawTriangle(greenTriangle, colorGreen);
 
     final Path yellowTriangle = Path()
       ..moveTo(9 * stepSize, 6 * stepSize)
       ..lineTo(7.5 * stepSize, 7.5 * stepSize)
       ..lineTo(9 * stepSize, 9 * stepSize)
       ..close();
-    canvas.drawPath(yellowTriangle, fillYellow);
+    drawTriangle(yellowTriangle, colorYellow);
 
     final Path blueTriangle = Path()
       ..moveTo(6 * stepSize, 9 * stepSize)
       ..lineTo(7.5 * stepSize, 7.5 * stepSize)
       ..lineTo(9 * stepSize, 9 * stepSize)
       ..close();
-    canvas.drawPath(blueTriangle, fillBlue);
-
-    // Draw borders over triangles
-    canvas.drawPath(redTriangle, borderPaint);
-    canvas.drawPath(greenTriangle, borderPaint);
-    canvas.drawPath(yellowTriangle, borderPaint);
-    canvas.drawPath(blueTriangle, borderPaint);
+    drawTriangle(blueTriangle, colorBlue);
   }
 
-  void _drawInnerYardPanel(Canvas canvas, double x, double y, double sideSize) {
+  void _drawInnerYardPanel(Canvas canvas, double x, double y, double sideSize, Color glowColor) {
     final Paint borderPaint = Paint()
-      ..color = const Color(0xFF334155)
+      ..color = glowColor.withOpacity(0.6)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final Paint fillWhite = Paint()..color = Colors.white.withOpacity(0.9);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, y, sideSize, sideSize), const Radius.circular(8)), fillWhite);
-    canvas.drawRRect(RRect.fromRectAndRadius(Rect.fromLTWH(x, y, sideSize, sideSize), const Radius.circular(8)), borderPaint);
+    final Paint fillWhite = Paint()..color = const Color(0xFF131929).withOpacity(0.85);
+    
+    final rrect = RRect.fromRectAndRadius(Rect.fromLTWH(x, y, sideSize, sideSize), const Radius.circular(16));
+    canvas.drawRRect(rrect, fillWhite);
+    canvas.drawRRect(rrect, borderPaint);
+    
+    // Draw 4 token home slots inside the yard
+    final double padding = sideSize / 3;
+    final Paint slotPaint = Paint()
+      ..color = const Color(0xFF1D263B)
+      ..style = PaintingStyle.fill;
+    
+    final Paint slotBorder = Paint()
+      ..color = glowColor.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    for (int col = 0; col < 2; col++) {
+      for (int row = 0; row < 2; row++) {
+        final double cx = x + padding + (col * padding * 1.1) + 4;
+        final double cy = y + padding + (row * padding * 1.1) + 4;
+        canvas.drawCircle(Offset(cx, cy), 12, slotPaint);
+        canvas.drawCircle(Offset(cx, cy), 12, slotBorder);
+      }
+    }
   }
 
   void _drawStar(Canvas canvas, double x, double y, double size) {
-    final Paint starPaint = Paint()..color = const Color(0xFF64748B);
     final double cx = x + size / 2;
     final double cy = y + size / 2;
-    final double outer = size * 0.35;
-    final double inner = size * 0.15;
+    final double outer = size * 0.4;
+    final double inner = size * 0.18;
+
+    final Paint starPaint = Paint()
+      ..shader = const RadialGradient(
+        colors: [AppColors.gold, Color(0xFFFF8C00)],
+      ).createShader(Rect.fromLTWH(x, y, size, size));
+
+    final Paint starBorder = Paint()
+      ..color = Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
 
     final Path path = Path();
     for (int i = 0; i < 5; i++) {
@@ -1524,6 +1728,7 @@ class LudoBoardPainter extends CustomPainter {
     }
     path.close();
     canvas.drawPath(path, starPaint);
+    canvas.drawPath(path, starBorder);
   }
 
   @override

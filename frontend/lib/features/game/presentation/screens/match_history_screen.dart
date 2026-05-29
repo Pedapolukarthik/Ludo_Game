@@ -5,6 +5,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/match_history_provider.dart';
 import '../../domain/match_history_item.dart';
+import '../../../../core/services/audio_service.dart';
 
 class MatchHistoryScreen extends ConsumerWidget {
   const MatchHistoryScreen({super.key});
@@ -26,12 +27,18 @@ class MatchHistoryScreen extends ConsumerWidget {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.go('/profile'),
+          onPressed: () {
+            AudioService.instance.playButtonClick();
+            context.go('/profile');
+          },
         ),
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
-            onPressed: () => ref.read(matchHistoryProvider.notifier).fetchMatchHistory(),
+            onPressed: () {
+              AudioService.instance.playButtonClick();
+              ref.read(matchHistoryProvider.notifier).fetchMatchHistory();
+            },
           ),
         ],
       ),
@@ -44,7 +51,10 @@ class MatchHistoryScreen extends ConsumerWidget {
               Text('Error loading match history: $error', style: const TextStyle(color: AppColors.ludoRed)),
               const SizedBox(height: 16),
               ElevatedButton(
-                onPressed: () => ref.read(matchHistoryProvider.notifier).fetchMatchHistory(),
+                onPressed: () {
+                  AudioService.instance.playButtonClick();
+                  ref.read(matchHistoryProvider.notifier).fetchMatchHistory();
+                },
                 child: const Text('RETRY'),
               ),
             ],

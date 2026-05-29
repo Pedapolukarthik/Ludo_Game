@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:google_fonts/google_fonts.dart';
+import 'package:lottie/lottie.dart';
 import '../../../../core/network/socket_provider.dart';
 import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../../core/services/audio_service.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -112,11 +115,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.pop(context),
+            onPressed: () {
+              AudioService.instance.playButtonClick();
+              Navigator.pop(context);
+            },
             child: const Text('Cancel'),
           ),
           ElevatedButton(
             onPressed: () {
+              AudioService.instance.playButtonClick();
               final code = codeController.text.trim();
               if (code.isNotEmpty) {
                 ref.read(socketServiceProvider).joinRoom(code);
@@ -178,11 +185,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(context),
+              onPressed: () {
+                AudioService.instance.playButtonClick();
+                Navigator.pop(context);
+              },
               child: const Text('Cancel'),
             ),
             ElevatedButton(
               onPressed: () {
+                AudioService.instance.playButtonClick();
                 ref.read(socketServiceProvider).createRoom(selectedPlayers, entryFee);
                 Navigator.pop(context);
               },
@@ -244,13 +255,32 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       return const Scaffold(body: Center(child: CircularProgressIndicator()));
     }
 
+    // Calculate level progress (e.g. user needs 1000 XP per level)
+    final double xpInLevel = (user.xp % 1000).toDouble();
+    final double xpProgress = xpInLevel / 1000.0;
+
     return Scaffold(
       backgroundColor: AppColors.background,
       body: Stack(
         children: [
+          // Cyberpunk glowing backdrop
+          Positioned.fill(
+            child: Opacity(
+              opacity: 0.05,
+              child: Container(
+                decoration: const BoxDecoration(
+                  gradient: RadialGradient(
+                    colors: [AppColors.primary, Colors.transparent],
+                    radius: 1.5,
+                  ),
+                ),
+              ),
+            ),
+          ),
+          
           SafeArea(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
@@ -258,27 +288,72 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      // User Info
+                      // User Info with Rank border
                       GestureDetector(
-                        onTap: () => context.go('/profile'),
+                        onTap: () {
+                          AudioService.instance.playButtonClick();
+                          context.go('/profile');
+                        },
                         child: Row(
                           children: [
-                            CircleAvatar(
-                              radius: 22,
-                              backgroundColor: AppColors.primary,
-                              backgroundImage: NetworkImage(user.avatar),
+                            Container(
+                              padding: const EdgeInsets.all(2.5),
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                gradient: AppTheme.cyberGradient,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.accentNeon.withOpacity(0.3),
+                                    blurRadius: 8,
+                                    spreadRadius: 1,
+                                  ),
+                                ],
+                              ),
+                              child: CircleAvatar(
+                                radius: 22,
+                                backgroundColor: AppColors.surface,
+                                backgroundImage: NetworkImage(user.avatar),
+                              ),
                             ),
-                            const SizedBox(width: 10),
+                            const SizedBox(width: 12),
                             Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(
-                                  user.name,
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                Row(
+                                  children: [
+                                    Text(
+                                      user.name,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                        color: Colors.white,
+                                        letterSpacing: 0.5,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                      Icons.verified_user_rounded,
+                                      size: 14,
+                                      color: AppColors.accentNeon,
+                                    ),
+                                  ],
                                 ),
-                                Text(
-                                  'Level ${user.level}',
-                                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                                const SizedBox(height: 2),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.primary.withOpacity(0.2),
+                                    borderRadius: BorderRadius.circular(6),
+                                    border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 0.8),
+                                  ),
+                                  child: Text(
+                                    'LEVEL ${user.level}',
+                                    style: const TextStyle(
+                                      color: AppColors.accentNeon,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
                                 ),
                               ],
                             ),
@@ -290,19 +365,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
                             decoration: BoxDecoration(
                               color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(color: AppColors.gold.withOpacity(0.3)),
+                              borderRadius: BorderRadius.circular(24),
+                              border: Border.all(color: AppColors.gold.withOpacity(0.4)),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: AppColors.gold.withOpacity(0.1),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
                             child: Row(
                               children: [
-                                const Icon(Icons.monetization_on, color: AppColors.gold, size: 20),
-                                const SizedBox(width: 4),
+                                const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 18),
+                                const SizedBox(width: 6),
                                 Text(
                                   '${user.coins}',
-                                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                    fontSize: 14,
+                                    color: Colors.white,
+                                  ),
                                 ),
                               ],
                             ),
@@ -310,21 +396,91 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const SizedBox(width: 8),
                           if (user.isAdmin) ...[
                             IconButton(
-                              icon: const Icon(Icons.admin_panel_settings, color: AppColors.secondary),
+                              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.secondary),
                               tooltip: 'Open Admin Control Panel',
-                              onPressed: () => context.go('/admin'),
+                              onPressed: () {
+                                AudioService.instance.playButtonClick();
+                                context.go('/admin');
+                              },
                             ),
-                            const SizedBox(width: 4),
                           ],
                           IconButton(
-                            icon: const Icon(Icons.settings, color: Colors.white),
-                            onPressed: () => context.go('/settings'),
+                            icon: const Icon(Icons.settings_suggest_rounded, color: Colors.white),
+                            onPressed: () {
+                              AudioService.instance.playButtonClick();
+                              context.go('/settings');
+                            },
                           ),
                         ],
                       ),
                     ],
                   ),
                   
+                  const SizedBox(height: 16),
+                  
+                  // XP Progress Bar
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            'RANK PROGRESS',
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.textSecondary,
+                              letterSpacing: 1.0,
+                            ),
+                          ),
+                          Text(
+                            '${xpInLevel.toInt()}/1000 XP',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.bold,
+                              color: AppColors.secondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(8),
+                        child: Container(
+                          height: 8,
+                          color: AppColors.surface,
+                          child: Stack(
+                            children: [
+                              Positioned.fill(
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: FractionallySizedBox(
+                                    widthFactor: xpProgress,
+                                    child: Container(
+                                      decoration: const BoxDecoration(
+                                        gradient: AppTheme.purplePinkGradient,
+                                        boxShadow: [
+                                          BoxShadow(
+                                            color: AppColors.secondary,
+                                            blurRadius: 4,
+                                            spreadRadius: 1,
+                                          )
+                                        ]
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  )
+                  .animate()
+                  .fade(duration: 400.ms, delay: 100.ms),
+
                   const SizedBox(height: 24),
                   
                   // Promoted Banner Card
@@ -332,40 +488,63 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     height: 140,
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
-                      gradient: AppTheme.purplePinkGradient,
-                      borderRadius: BorderRadius.circular(20),
+                      gradient: AppTheme.cyberGradient,
+                      borderRadius: BorderRadius.circular(24),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.4),
-                          blurRadius: 15,
-                          offset: const Offset(0, 5),
+                          color: AppColors.primary.withOpacity(0.3),
+                          blurRadius: 20,
+                          offset: const Offset(0, 8),
                         ),
                       ],
+                      border: Border.all(color: AppColors.accentNeon.withOpacity(0.3), width: 1.5),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'LUDO ARENA',
-                              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold, letterSpacing: 1.5, fontFamily: 'Outfit'),
-                            ),
-                            SizedBox(height: 4),
-                            Text(
-                              'Play online, claim rewards,\nwin real gaming glory!',
-                              style: TextStyle(fontSize: 12, color: Colors.white70),
-                            ),
-                          ],
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Text(
+                                'LUDO ARENA',
+                                style: TextStyle(
+                                  fontSize: 26,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2.0,
+                                  color: Colors.white,
+                                  fontFamily: 'Outfit',
+                                  shadows: [
+                                    Shadow(color: Colors.black45, blurRadius: 6),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Climb the rankings, challenge friends, and dominate the arena!',
+                                style: GoogleFonts.outfit(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.9),
+                                  height: 1.3,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                        Icon(Icons.casino_rounded, size: 80, color: Colors.white.withOpacity(0.2)),
+                        const SizedBox(width: 8),
+                        Icon(
+                          Icons.casino_rounded,
+                          size: 76,
+                          color: Colors.white.withOpacity(0.25),
+                        ).animate(onPlay: (c) => c.repeat(reverse: true))
+                         .rotate(duration: 3.seconds)
+                         .scale(begin: const Offset(1, 1), end: const Offset(1.1, 1.1), duration: 1.5.seconds),
                       ],
                     ),
                   )
                   .animate()
-                  .fade(duration: 500.ms)
+                  .fade(duration: 500.ms, delay: 200.ms)
                   .slideY(begin: 0.1, end: 0),
                   
                   const SizedBox(height: 24),
@@ -373,8 +552,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   // Game Modes Layout
                   const Text(
                     'CHOOSE BATTLEFIELD',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textSecondary, letterSpacing: 1.5),
-                  ),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textSecondary,
+                      letterSpacing: 2.0,
+                    ),
+                  ).animate().fade(delay: 300.ms),
                   const SizedBox(height: 12),
 
                   Row(
@@ -384,8 +568,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: _buildModeCard(
                           title: 'Quick Match',
                           subtitle: '2 Players',
-                          icon: Icons.flash_on,
+                          icon: Icons.flash_on_rounded,
                           color: AppColors.ludoBlue,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF2E8BC0), Color(0xFF145DA0)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           onTap: () => _startMatchmaking(2),
                         ),
                       ),
@@ -395,13 +584,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         child: _buildModeCard(
                           title: 'Classic Battle',
                           subtitle: '4 Players',
-                          icon: Icons.groups,
+                          icon: Icons.groups_rounded,
                           color: AppColors.ludoRed,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFF2E63), Color(0xFFB83B5E)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           onTap: () => _startMatchmaking(4),
                         ),
                       ),
                     ],
-                  ),
+                  ).animate().fade(delay: 350.ms).slideY(begin: 0.05, end: 0),
                   
                   const SizedBox(height: 12),
 
@@ -411,9 +605,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Expanded(
                         child: _buildModeCard(
                           title: 'Create Room',
-                          subtitle: 'With friends',
-                          icon: Icons.add_circle,
+                          subtitle: 'Play with Friends',
+                          icon: Icons.add_circle_outline_rounded,
                           color: AppColors.ludoGreen,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFF08D9D6), Color(0xFF00ADB5)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           onTap: _showCreateRoomDialog,
                         ),
                       ),
@@ -422,29 +621,34 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Expanded(
                         child: _buildModeCard(
                           title: 'Join Room',
-                          subtitle: 'Enter Code',
-                          icon: Icons.vpn_key,
+                          subtitle: 'Enter Room Code',
+                          icon: Icons.vpn_key_rounded,
                           color: AppColors.ludoYellow,
+                          gradient: const LinearGradient(
+                            colors: [Color(0xFFFFE259), Color(0xFFFFA751)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          ),
                           onTap: _showJoinRoomDialog,
                         ),
                       ),
                     ],
-                  ),
+                  ).animate().fade(delay: 400.ms).slideY(begin: 0.05, end: 0),
 
                   const SizedBox(height: 24),
 
-                  // Bot Heuristics Card
-                  _buildBotSelector(),
+                  // Bot Selector Card
+                  _buildBotSelector().animate().fade(delay: 450.ms).slideY(begin: 0.05, end: 0),
 
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 20),
 
-                  // Nav Action row
+                  // Navigation actions
                   Row(
                     children: [
                       Expanded(
                         child: _buildActionNav(
                           title: 'LEADERBOARD',
-                          icon: Icons.emoji_events,
+                          icon: Icons.emoji_events_rounded,
                           color: AppColors.gold,
                           onTap: () => context.go('/leaderboard'),
                         ),
@@ -453,13 +657,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       Expanded(
                         child: _buildActionNav(
                           title: 'REWARDS WHEEL',
-                          icon: Icons.star,
+                          icon: Icons.stars_rounded,
                           color: AppColors.secondary,
                           onTap: () => context.go('/rewards'),
                         ),
                       ),
                     ],
-                  ),
+                  ).animate().fade(delay: 500.ms),
                 ],
               ),
             ),
@@ -467,7 +671,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           
           // Matchmaking Modal Overlay
           if (_isMatching)
-            _buildMatchmakingOverlay(),
+            _buildMatchmakingOverlay().animate().fade(duration: 300.ms),
         ],
       ),
     );
@@ -478,22 +682,71 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required String subtitle,
     required IconData icon,
     required Color color,
+    required Gradient gradient,
     required VoidCallback onTap,
   }) {
-    return Card(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
-          child: Column(
-            children: [
-              Icon(icon, size: 36, color: color),
-              const SizedBox(height: 12),
-              Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 2),
-              Text(subtitle, style: const TextStyle(color: AppColors.textSecondary, fontSize: 12)),
-            ],
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: color.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: color.withOpacity(0.3), width: 1.5),
+        ),
+        child: InkWell(
+          onTap: () {
+            AudioService.instance.playButtonClick();
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [AppColors.cardBg, AppColors.surface.withOpacity(0.8)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: gradient,
+                    boxShadow: [
+                      BoxShadow(
+                        color: color.withOpacity(0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      )
+                    ]
+                  ),
+                  child: Icon(icon, size: 28, color: Colors.white),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  title,
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -507,19 +760,31 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required VoidCallback onTap,
   }) {
     return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: color.withOpacity(0.2), width: 1.2),
+      ),
       child: InkWell(
-        onTap: onTap,
+        onTap: () {
+          AudioService.instance.playButtonClick();
+          onTap();
+        },
         borderRadius: BorderRadius.circular(16),
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, color: color),
+              Icon(icon, color: color, size: 20),
               const SizedBox(width: 8),
               Text(
                 title,
-                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 1),
+                style: GoogleFonts.outfit(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                  color: Colors.white,
+                  letterSpacing: 1.0,
+                ),
               ),
             ],
           ),
@@ -531,21 +796,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget _buildBotSelector() {
     return Card(
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            const Text(
-              'PRACTICE MODE (VS AI BOT)',
-              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 1),
+            Row(
+              children: [
+                const Icon(Icons.rocket_launch_rounded, color: AppColors.ludoGreen, size: 22),
+                const SizedBox(width: 8),
+                Text(
+                  'PRACTICE MODE (VS AI BOT)',
+                  style: GoogleFonts.outfit(
+                    fontWeight: FontWeight.bold,
+                    fontSize: 14,
+                    color: Colors.white,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildDifficultyBtn('EASY', AppColors.ludoGreen, () => _startAiMatch('easy')),
-                _buildDifficultyBtn('MEDIUM', AppColors.ludoYellow, () => _startAiMatch('medium')),
-                _buildDifficultyBtn('HARD', AppColors.ludoRed, () => _startAiMatch('hard')),
+                Expanded(
+                  child: _buildDifficultyBtn('EASY', AppColors.ludoGreen, () => _startAiMatch('easy')),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildDifficultyBtn('MEDIUM', AppColors.ludoYellow, () => _startAiMatch('medium')),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildDifficultyBtn('HARD', AppColors.tokenRed, () => _startAiMatch('hard')),
+                ),
               ],
             ),
           ],
@@ -556,43 +840,93 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   Widget _buildDifficultyBtn(String label, Color color, VoidCallback onTap) {
     return OutlinedButton(
-      onPressed: onTap,
+      onPressed: () {
+        AudioService.instance.playButtonClick();
+        onTap();
+      },
       style: OutlinedButton.styleFrom(
-        side: BorderSide(color: color.withOpacity(0.5)),
+        side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
         foregroundColor: color,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        backgroundColor: color.withOpacity(0.04),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       ),
-      child: Text(label, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+      child: Text(
+        label,
+        style: GoogleFonts.outfit(
+          fontWeight: FontWeight.bold,
+          fontSize: 12,
+          letterSpacing: 0.8,
+        ),
+      ),
     );
   }
 
   Widget _buildMatchmakingOverlay() {
     return Container(
-      color: Colors.black.withOpacity(0.85),
+      color: Colors.black.withOpacity(0.9),
       child: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Floating dice animation
-            const Icon(Icons.casino, size: 80, color: AppColors.secondary)
-                .animate(onPlay: (controller) => controller.repeat())
-                .rotate(duration: 1.seconds),
+            // Tech Lottie Radar/Dice Loading Animation
+            Container(
+              width: 180,
+              height: 180,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                boxShadow: [
+                  BoxShadow(
+                    color: AppColors.secondary.withOpacity(0.2),
+                    blurRadius: 30,
+                    spreadRadius: 5,
+                  ),
+                ],
+              ),
+              child: ClipOval(
+                child: Lottie.network(
+                  'https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/LottieLogo1.json',
+                  fit: BoxFit.cover,
+                  errorBuilder: (context, error, stackTrace) {
+                    return const Icon(Icons.casino, size: 80, color: AppColors.secondary);
+                  },
+                ),
+              ),
+            ),
             
-            const SizedBox(height: 24),
+            const SizedBox(height: 32),
             
             const Text(
-              'FINDING MATCH...',
-              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, letterSpacing: 2, fontFamily: 'Outfit'),
-            ),
+              'SEARCHING FOR RIVALS...',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 3,
+                fontFamily: 'Outfit',
+                color: Colors.white,
+                shadows: [
+                  Shadow(color: AppColors.secondary, blurRadius: 10),
+                ],
+              ),
+            ).animate(onPlay: (c) => c.repeat(reverse: true))
+             .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 800.ms),
+             
             const SizedBox(height: 8),
             
-            Text(
-              'Mode: $_activeMatchMode',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.surface,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppColors.textMuted.withOpacity(0.3)),
+              ),
+              child: Text(
+                'Mode: $_activeMatchMode',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
             ),
             
-            const SizedBox(height: 4),
+            const SizedBox(height: 12),
             
             Text(
               'Players joined queue: $_matchingCount',
@@ -602,12 +936,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             const SizedBox(height: 48),
             
             ElevatedButton(
-              onPressed: _cancelMatchmaking,
+              onPressed: () {
+                AudioService.instance.playButtonClick();
+                _cancelMatchmaking();
+              },
               style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.ludoRed,
-                padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 14),
+                backgroundColor: AppColors.tokenRed,
+                shadowColor: AppColors.tokenRed.withOpacity(0.4),
+                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
               ),
-              child: const Text('CANCEL MATCHMAKING'),
+              child: const Text('ABORT MISSION'),
             ),
           ],
         ),

@@ -6,6 +6,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../../../../core/services/audio_service.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -24,6 +25,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   bool _isSigningIn = false;
 
   void _handleGoogleSignIn() async {
+    AudioService.instance.playButtonClick();
     if (_isSigningIn) return;
     setState(() {
       _isSigningIn = true;
@@ -88,6 +90,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
   }
 
   void _handleMockLogin() async {
+    AudioService.instance.playButtonClick();
     final username = _mockUserController.text.trim();
     if (username.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -254,6 +257,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                     // Quick Mock Login Toggle
                     TextButton(
                       onPressed: () {
+                        AudioService.instance.playButtonClick();
                         setState(() {
                           _isMockDrawerOpen = !_isMockDrawerOpen;
                         });

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../../../core/services/audio_service.dart';
 import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
@@ -24,16 +25,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   void _toggleMusic(bool enabled) async {
+    AudioService.instance.playButtonClick();
     setState(() => _musicEnabled = enabled);
     await LocalStorage.setMusicEnabled(enabled);
+    AudioService.instance.handleSettingsChanged();
   }
 
   void _toggleSfx(bool enabled) async {
+    AudioService.instance.playButtonClick();
     setState(() => _sfxEnabled = enabled);
     await LocalStorage.setSfxEnabled(enabled);
+    AudioService.instance.handleSettingsChanged();
   }
 
   void _handleLogout() async {
+    AudioService.instance.playButtonClick();
     await ref.read(authProvider.notifier).logout();
     if (mounted) {
       context.go('/login');
@@ -50,7 +56,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.go('/home'),
+          onPressed: () {
+            AudioService.instance.playButtonClick();
+            context.go('/home');
+          },
         ),
       ),
       body: ListView(

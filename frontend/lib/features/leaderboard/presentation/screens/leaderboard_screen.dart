@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/audio_service.dart';
 
 class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
@@ -63,7 +64,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.go('/home'),
+          onPressed: () {
+            AudioService.instance.playButtonClick();
+            context.go('/home');
+          },
         ),
       ),
       body: Column(
@@ -173,7 +177,10 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
 
   Widget _buildSortTab(String label, bool isSelected, VoidCallback onTap) {
     return InkWell(
-      onTap: onTap,
+      onTap: () {
+        AudioService.instance.playButtonClick();
+        onTap();
+      },
       borderRadius: BorderRadius.circular(12),
       child: Container(
         padding: const EdgeInsets.symmetric(vertical: 12),
