@@ -6,6 +6,8 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
+import '../widgets/missions_widget.dart';
+import '../providers/missions_provider.dart';
 
 class RewardsScreen extends ConsumerStatefulWidget {
   const RewardsScreen({super.key});
@@ -77,6 +79,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with SingleTicker
         });
         // Update user state coins & XP in Riverpod
         ref.read(authProvider.notifier).tryRestoreSession();
+        ref.read(dailyMissionsProvider.notifier).fetchMissions();
         _showSuccessDialog('Daily Reward', data['message']);
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -134,6 +137,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with SingleTicker
             _spinClaimed = true;
           });
           ref.read(authProvider.notifier).tryRestoreSession();
+          ref.read(dailyMissionsProvider.notifier).fetchMissions();
           _showSuccessDialog('Spin Outcome', 'Congratulations! You won: $label');
         });
       } else {
@@ -324,6 +328,8 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with SingleTicker
                 ),
               ),
             ),
+            const SizedBox(height: 24),
+            const DailyMissionsWidget(),
           ],
         ),
       ),

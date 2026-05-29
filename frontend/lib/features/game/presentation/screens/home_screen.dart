@@ -308,6 +308,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             ),
                           ),
                           const SizedBox(width: 8),
+                          if (user.isAdmin) ...[
+                            IconButton(
+                              icon: const Icon(Icons.admin_panel_settings, color: AppColors.secondary),
+                              tooltip: 'Open Admin Control Panel',
+                              onPressed: () => context.go('/admin'),
+                            ),
+                            const SizedBox(width: 4),
+                          ],
                           IconButton(
                             icon: const Icon(Icons.settings, color: Colors.white),
                             onPressed: () => context.go('/settings'),

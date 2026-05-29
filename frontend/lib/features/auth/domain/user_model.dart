@@ -13,6 +13,10 @@ class UserModel {
   final List<String> achievements;
   final String referralCode;
   final List<String> friends;
+  final bool banned;
+  final int losses;
+  final int currentWinStreak;
+  final int highestWinStreak;
 
   UserModel({
     required this.id,
@@ -29,6 +33,10 @@ class UserModel {
     required this.achievements,
     required this.referralCode,
     required this.friends,
+    this.banned = false,
+    this.losses = 0,
+    this.currentWinStreak = 0,
+    this.highestWinStreak = 0,
   });
 
   factory UserModel.fromJson(Map<String, dynamic> json) {
@@ -49,6 +57,10 @@ class UserModel {
       friends: List<String>.from(
         (json['friends'] as List?)?.map((e) => e is Map ? (e['_id'] ?? '') : e.toString()) ?? []
       ),
+      banned: json['banned'] ?? false,
+      losses: json['losses'] ?? 0,
+      currentWinStreak: json['currentWinStreak'] ?? 0,
+      highestWinStreak: json['highestWinStreak'] ?? 0,
     );
   }
 
@@ -68,6 +80,10 @@ class UserModel {
       'achievements': achievements,
       'referralCode': referralCode,
       'friends': friends,
+      'banned': banned,
+      'losses': losses,
+      'currentWinStreak': currentWinStreak,
+      'highestWinStreak': highestWinStreak,
     };
   }
 
@@ -86,6 +102,10 @@ class UserModel {
     List<String>? achievements,
     String? referralCode,
     List<String>? friends,
+    bool? banned,
+    int? losses,
+    int? currentWinStreak,
+    int? highestWinStreak,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -102,6 +122,12 @@ class UserModel {
       achievements: achievements ?? this.achievements,
       referralCode: referralCode ?? this.referralCode,
       friends: friends ?? this.friends,
+      banned: banned ?? this.banned,
+      losses: losses ?? this.losses,
+      currentWinStreak: currentWinStreak ?? this.currentWinStreak,
+      highestWinStreak: highestWinStreak ?? this.highestWinStreak,
     );
   }
+
+  bool get isAdmin => email.contains('admin') || email == 'admin@ludopremium.com' || email == 'admin@example.com';
 }

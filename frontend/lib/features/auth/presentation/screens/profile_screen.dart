@@ -237,9 +237,39 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                       mainAxisAlignment: MainAxisAlignment.spaceAround,
                       children: [
                         _buildStat('Wins', '${user.totalWins}', AppColors.ludoGreen),
+                        _buildStat('Losses', '${user.losses}', AppColors.ludoRed),
                         _buildStat('Matches', '${user.totalGames}', AppColors.ludoBlue),
-                        _buildStat('Streak', '${user.loginStreak} days', AppColors.ludoYellow),
                       ],
+                    ),
+                    const SizedBox(height: 16),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                      children: [
+                        _buildStat(
+                          'Win %',
+                          user.totalGames > 0
+                              ? '${(user.totalWins / user.totalGames * 100).toStringAsFixed(1)}%'
+                              : '0.0%',
+                          AppColors.gold,
+                        ),
+                        _buildStat('Win Streak', '${user.currentWinStreak}', AppColors.secondary),
+                        _buildStat('Max Streak', '${user.highestWinStreak}', AppColors.gold),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    const Divider(color: Color(0xFF334155)),
+                    const SizedBox(height: 8),
+                    // Action button to open match history
+                    ElevatedButton.icon(
+                      onPressed: () => context.go('/match-history'),
+                      icon: const Icon(Icons.history, size: 18),
+                      label: const Text('VIEW MATCH HISTORY'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.cardBg,
+                        side: const BorderSide(color: AppColors.primary, width: 1.5),
+                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
                   ],
                 ),

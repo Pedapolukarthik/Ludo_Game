@@ -11,6 +11,8 @@ import '../../features/game/presentation/screens/lobby_screen.dart';
 import '../../features/game/presentation/screens/game_room_screen.dart';
 import '../../features/leaderboard/presentation/screens/leaderboard_screen.dart';
 import '../../features/rewards/presentation/screens/rewards_screen.dart';
+import '../../features/admin/presentation/screens/admin_dashboard_screen.dart';
+import '../../features/game/presentation/screens/match_history_screen.dart';
 
 final routerProvider = Provider<GoRouter>((ref) {
   return GoRouter(
@@ -63,6 +65,14 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(
         path: '/settings',
         builder: (context, state) => const SettingsScreen(),
+      ),
+      GoRoute(
+        path: '/admin',
+        builder: (context, state) => const AdminDashboardScreen(),
+      ),
+      GoRoute(
+        path: '/match-history',
+        builder: (context, state) => const MatchHistoryScreen(),
       ),
     ],
   );
