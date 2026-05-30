@@ -4,7 +4,7 @@ import '../config/env_config.dart';
 
 class SocketService {
   io.Socket? _socket;
-  final String _serverUrl = EnvConfig.socketUrl;
+  String get _serverUrl => EnvConfig.socketUrl;
 
   // Callbacks for screen state synchronization
   void Function(Map<String, dynamic>)? onMatchFound;

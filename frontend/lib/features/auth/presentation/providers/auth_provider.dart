@@ -46,9 +46,13 @@ class AuthNotifier extends StateNotifier<AuthState> {
       final response = await ApiClient.get('/auth/me');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final user = UserModel.fromJson(data['user']);
-        await LocalStorage.saveUserProfile(user.toJson());
-        state = AuthState(user: user, isAuthenticated: true);
+        if (data is Map<String, dynamic> && data.containsKey('user')) {
+          final user = UserModel.fromJson(data['user']);
+          await LocalStorage.saveUserProfile(user.toJson());
+          state = AuthState(user: user, isAuthenticated: true);
+        } else {
+          await logout();
+        }
       } else {
         await logout();
       }
@@ -78,19 +82,33 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final token = data['token'];
-        final user = UserModel.fromJson(data['user']);
+        if (data is Map<String, dynamic> && data.containsKey('token') && data.containsKey('user')) {
+          final token = data['token'];
+          final user = UserModel.fromJson(data['user']);
 
-        await LocalStorage.saveToken(token);
-        await LocalStorage.saveUserProfile(user.toJson());
+          await LocalStorage.saveToken(token);
+          await LocalStorage.saveUserProfile(user.toJson());
 
-        state = AuthState(user: user, isAuthenticated: true);
-        return true;
+          state = AuthState(user: user, isAuthenticated: true);
+          return true;
+        } else {
+          state = state.copyWith(
+            isLoading: false,
+            errorMessage: 'Invalid response format from authentication server',
+          );
+          return false;
+        }
       } else {
-        final data = jsonDecode(response.body);
+        String errorMsg = 'Authentication failed';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data.containsKey('message')) {
+            errorMsg = data['message'];
+          }
+        } catch (_) {}
         state = state.copyWith(
           isLoading: false,
-          errorMessage: data['message'] ?? 'Authentication failed',
+          errorMessage: errorMsg,
         );
         return false;
       }

@@ -266,8 +266,8 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                 child: SizedBox(
                   width: 220,
                   height: 200,
-                  child: Lottie.network(
-                    'https://assets10.lottiefiles.com/packages/lf20_vu9jxpmo.json',
+                  child: Lottie.asset(
+                    'assets/animations/trophy.json',
                     fit: BoxFit.cover,
                     errorBuilder: (context, error, stackTrace) {
                       return const Center(

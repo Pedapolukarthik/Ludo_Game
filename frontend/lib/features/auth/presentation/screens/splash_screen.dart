@@ -77,8 +77,8 @@ class _SplashScreenState extends ConsumerState<SplashScreen> {
                     ],
                   ),
                   child: ClipOval(
-                    child: Lottie.network(
-                      'https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/LottieLogo1.json',
+                    child: Lottie.asset(
+                      'assets/animations/loading.json',
                       fit: BoxFit.cover,
                       errorBuilder: (context, error, stackTrace) {
                         // Fallback to static icon if network error

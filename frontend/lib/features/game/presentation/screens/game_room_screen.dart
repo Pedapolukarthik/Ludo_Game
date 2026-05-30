@@ -775,8 +775,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
               child: SizedBox(
                 width: 320,
                 height: 300,
-                child: Lottie.network(
-                  'https://assets10.lottiefiles.com/packages/lf20_vu9jxpmo.json',
+                child: Lottie.asset(
+                  'assets/animations/confetti.json',
                   fit: BoxFit.cover,
                   errorBuilder: (context, error, stackTrace) {
                     // Fallback animated icon if network is offline

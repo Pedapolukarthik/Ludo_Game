@@ -13,13 +13,27 @@ class DailyMissionsNotifier extends StateNotifier<AsyncValue<List<MissionModel>>
       final response = await ApiClient.get('/rewards/missions');
       if (response.statusCode == 200) {
         final data = jsonDecode(response.body);
-        final list = (data['missions'] as List)
-            .map((m) => MissionModel.fromJson(m))
-            .toList();
-        state = AsyncValue.data(list);
+        if (data is Map<String, dynamic> && data.containsKey('missions') && data['missions'] is List) {
+          final list = (data['missions'] as List)
+              .map((m) => MissionModel.fromJson(m))
+              .toList();
+          state = AsyncValue.data(list);
+        } else {
+          String errorMsg = 'Invalid daily missions response format';
+          if (data is Map && data.containsKey('message')) {
+            errorMsg = data['message'];
+          }
+          state = AsyncValue.error(errorMsg, StackTrace.current);
+        }
       } else {
-        final error = jsonDecode(response.body)['message'] ?? 'Failed to load daily missions';
-        state = AsyncValue.error(error, StackTrace.current);
+        String errorMsg = 'Failed to load daily missions (${response.statusCode})';
+        try {
+          final data = jsonDecode(response.body);
+          if (data is Map && data.containsKey('message')) {
+            errorMsg = data['message'];
+          }
+        } catch (_) {}
+        state = AsyncValue.error(errorMsg, StackTrace.current);
       }
     } catch (e) {
       state = AsyncValue.error(e, StackTrace.current);

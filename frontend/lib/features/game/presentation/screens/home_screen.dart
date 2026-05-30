@@ -866,89 +866,92 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     return Container(
       color: Colors.black.withOpacity(0.9),
       child: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            // Tech Lottie Radar/Dice Loading Animation
-            Container(
-              width: 180,
-              height: 180,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                boxShadow: [
-                  BoxShadow(
-                    color: AppColors.secondary.withOpacity(0.2),
-                    blurRadius: 30,
-                    spreadRadius: 5,
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // Tech Lottie Radar/Dice Loading Animation
+              Container(
+                width: 180,
+                height: 180,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: AppColors.secondary.withOpacity(0.2),
+                      blurRadius: 30,
+                      spreadRadius: 5,
+                    ),
+                  ],
+                ),
+                child: ClipOval(
+                  child: Lottie.asset(
+                    'assets/animations/loading.json',
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stackTrace) {
+                      return const Icon(Icons.casino, size: 80, color: AppColors.secondary);
+                    },
                   ),
-                ],
-              ),
-              child: ClipOval(
-                child: Lottie.network(
-                  'https://raw.githubusercontent.com/xvrh/lottie-flutter/master/example/assets/LottieLogo1.json',
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) {
-                    return const Icon(Icons.casino, size: 80, color: AppColors.secondary);
-                  },
                 ),
               ),
-            ),
-            
-            const SizedBox(height: 32),
-            
-            const Text(
-              'SEARCHING FOR RIVALS...',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 3,
-                fontFamily: 'Outfit',
-                color: Colors.white,
-                shadows: [
-                  Shadow(color: AppColors.secondary, blurRadius: 10),
-                ],
+              
+              const SizedBox(height: 32),
+              
+              const Text(
+                'SEARCHING FOR RIVALS...',
+                style: TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 3,
+                  fontFamily: 'Outfit',
+                  color: Colors.white,
+                  shadows: [
+                    Shadow(color: AppColors.secondary, blurRadius: 10),
+                  ],
+                ),
+              ).animate(onPlay: (c) => c.repeat(reverse: true))
+               .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 800.ms),
+               
+              const SizedBox(height: 8),
+              
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.surface,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.textMuted.withOpacity(0.3)),
+                ),
+                child: Text(
+                  'Mode: $_activeMatchMode',
+                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
               ),
-            ).animate(onPlay: (c) => c.repeat(reverse: true))
-             .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 800.ms),
-             
-            const SizedBox(height: 8),
-            
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.surface,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: AppColors.textMuted.withOpacity(0.3)),
+              
+              const SizedBox(height: 12),
+              
+              Text(
+                'Players joined queue: $_matchingCount',
+                style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
               ),
-              child: Text(
-                'Mode: $_activeMatchMode',
-                style: const TextStyle(color: AppColors.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+              
+              const SizedBox(height: 48),
+              
+              ElevatedButton(
+                onPressed: () {
+                  AudioService.instance.playButtonClick();
+                  _cancelMatchmaking();
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.tokenRed,
+                  shadowColor: AppColors.tokenRed.withOpacity(0.4),
+                  padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                ),
+                child: const Text('ABORT MISSION'),
               ),
-            ),
-            
-            const SizedBox(height: 12),
-            
-            Text(
-              'Players joined queue: $_matchingCount',
-              style: const TextStyle(color: AppColors.textSecondary, fontSize: 14),
-            ),
-            
-            const SizedBox(height: 48),
-            
-            ElevatedButton(
-              onPressed: () {
-                AudioService.instance.playButtonClick();
-                _cancelMatchmaking();
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: AppColors.tokenRed,
-                shadowColor: AppColors.tokenRed.withOpacity(0.4),
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 16),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              ),
-              child: const Text('ABORT MISSION'),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

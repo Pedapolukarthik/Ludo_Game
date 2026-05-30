@@ -203,7 +203,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
     final hasThird = topThree.length > 2;
 
     return Container(
-      height: 200,
+      height: 270,
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.end,
