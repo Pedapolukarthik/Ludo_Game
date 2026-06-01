@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
+import '../../../../core/services/tts_service.dart';
 import '../providers/auth_provider.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -115,6 +116,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
       final response = await ApiClient.put('/users/profile', {'name': name});
       if (response.statusCode == 200) {
         ref.read(authProvider.notifier).tryRestoreSession();
+        TtsService.instance.speak("Profile updated to $name");
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated successfully!')),
         );
@@ -143,9 +145,17 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
         title: const Text('PLAYER PROFILE', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () => context.go('/home'),
+        leading: Semantics(
+          label: 'Back Button',
+          hint: 'Double tap to return to the home screen dashboard',
+          button: true,
+          child: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new_rounded),
+            onPressed: () {
+              TtsService.instance.speak("Back to home");
+              context.go('/home');
+            },
+          ),
         ),
       ),
       body: Column(
@@ -160,10 +170,13 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                   children: [
                     Row(
                       children: [
-                        CircleAvatar(
-                          radius: 40,
-                          backgroundColor: AppColors.primary,
-                          backgroundImage: NetworkImage(user.avatar),
+                        Semantics(
+                          label: 'Player Avatar Picture',
+                          child: CircleAvatar(
+                            radius: 40,
+                            backgroundColor: AppColors.primary,
+                            backgroundImage: NetworkImage(user.avatar),
+                          ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -173,18 +186,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                               Row(
                                 children: [
                                   Expanded(
-                                    child: TextField(
-                                      controller: _nameController,
-                                      style: const TextStyle(
-                                        fontSize: 20,
-                                        fontWeight: FontWeight.bold,
-                                        color: Colors.white,
+                                    child: Semantics(
+                                      label: 'Username Input Field',
+                                      hint: 'Enter a new username and press enter to update your profile name',
+                                      child: TextField(
+                                        controller: _nameController,
+                                        style: const TextStyle(
+                                          fontSize: 20,
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                        decoration: const InputDecoration(
+                                          border: InputBorder.none,
+                                          suffixIcon: Icon(Icons.edit, size: 16, color: AppColors.textSecondary),
+                                        ),
+                                        onSubmitted: (_) => _updateName(),
                                       ),
-                                      decoration: const InputDecoration(
-                                        border: InputBorder.none,
-                                        suffixIcon: Icon(Icons.edit, size: 16, color: AppColors.textSecondary),
-                                      ),
-                                      onSubmitted: (_) => _updateName(),
                                     ),
                                   ),
                                 ],
@@ -194,15 +211,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                                 style: const TextStyle(color: AppColors.textSecondary),
                               ),
                               const SizedBox(height: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                                decoration: BoxDecoration(
-                                  gradient: AppTheme.purplePinkGradient,
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text(
-                                  'Rank: ${user.rank}',
-                                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              Semantics(
+                                label: 'Player Current Rank Badge',
+                                value: user.rank,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    gradient: AppTheme.purplePinkGradient,
+                                    borderRadius: BorderRadius.circular(10),
+                                  ),
+                                  child: Text(
+                                    'Rank: ${user.rank}',
+                                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                                  ),
                                 ),
                               ),
                             ],
@@ -213,21 +234,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                     const SizedBox(height: 20),
                     
                     // Level Progression Bar
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text('LEVEL ${user.level}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
-                        Text('$currentLevelXp / $nextLevelXp XP', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(6),
-                      child: LinearProgressIndicator(
-                        value: xpProgress,
-                        backgroundColor: const Color(0xFF334155),
-                        valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
-                        minHeight: 8,
+                    Semantics(
+                      label: 'Level Progression Progress Bar',
+                      value: 'Level ${user.level}, $currentLevelXp out of $nextLevelXp Experience Points',
+                      child: Column(
+                        children: [
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('LEVEL ${user.level}', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                              Text('$currentLevelXp / $nextLevelXp XP', style: const TextStyle(color: AppColors.textSecondary, fontSize: 13)),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: xpProgress,
+                              backgroundColor: const Color(0xFF334155),
+                              valueColor: const AlwaysStoppedAnimation(AppColors.secondary),
+                              minHeight: 8,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     const SizedBox(height: 20),
@@ -260,15 +289,23 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                     const Divider(color: Color(0xFF334155)),
                     const SizedBox(height: 8),
                     // Action button to open match history
-                    ElevatedButton.icon(
-                      onPressed: () => context.go('/match-history'),
-                      icon: const Icon(Icons.history, size: 18),
-                      label: const Text('VIEW MATCH HISTORY'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.cardBg,
-                        side: const BorderSide(color: AppColors.primary, width: 1.5),
-                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    Semantics(
+                      label: 'View Match History Button',
+                      hint: 'Double tap to view details of your past online matches, wins, and losses',
+                      button: true,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          TtsService.instance.speak("View Match History");
+                          context.go('/match-history');
+                        },
+                        icon: const Icon(Icons.history, size: 18),
+                        label: const Text('VIEW MATCH HISTORY'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppColors.cardBg,
+                          side: const BorderSide(color: AppColors.primary, width: 1.5),
+                          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
                       ),
                     ),
                   ],
@@ -401,18 +438,22 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
   }
 
   Widget _buildStat(String title, String value, Color color) {
-    return Column(
-      children: [
-        Text(
-          value,
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          title,
-          style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
-        ),
-      ],
+    return Semantics(
+      label: 'Player Statistic: $title',
+      value: value,
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: color),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            title,
+            style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
+          ),
+        ],
+      ),
     );
   }
 }

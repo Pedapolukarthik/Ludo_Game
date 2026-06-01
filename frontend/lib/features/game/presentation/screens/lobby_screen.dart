@@ -6,6 +6,7 @@ import '../../../../core/network/socket_provider.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/services/audio_service.dart';
+import '../../../../core/services/tts_service.dart';
 
 class LobbyScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -75,6 +76,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
 
   void _copyRoomCode() {
     AudioService.instance.playButtonClick();
+    TtsService.instance.speak("Copy Room Code");
     Clipboard.setData(ClipboardData(text: widget.roomCode));
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Room code copied to clipboard!')),
@@ -109,6 +111,7 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
             AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Back to home");
             // Disconnect or leave room socket trigger
             context.go('/home');
           },
@@ -356,7 +359,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: canStart ? _startGame : null,
+                      onPressed: canStart ? () {
+                        TtsService.instance.speak("Launch Match");
+                        _startGame();
+                      } : null,
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         backgroundColor: AppColors.primary,
@@ -380,7 +386,10 @@ class _LobbyScreenState extends ConsumerState<LobbyScreen> {
                       ],
                     ),
                     child: ElevatedButton(
-                      onPressed: _toggleReady,
+                      onPressed: () {
+                        TtsService.instance.speak(isMeReady ? "Cancel ready" : "Mark ready");
+                        _toggleReady();
+                      },
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 18),
                         backgroundColor: isMeReady ? AppColors.tokenRed : AppColors.tokenGreen,

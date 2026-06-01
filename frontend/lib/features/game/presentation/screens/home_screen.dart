@@ -9,6 +9,9 @@ import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/services/audio_service.dart';
+import '../../../../core/services/voice_note_service.dart';
+import '../../../../core/services/tts_service.dart';
+import 'package:audioplayers/audioplayers.dart' as ap;
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -22,10 +25,88 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _matchingCount = 0;
   String _activeMatchMode = '2 Players';
 
+  final ap.AudioPlayer _voiceNotePlayer = ap.AudioPlayer();
+  bool _isRecordingVoice = false;
+  bool _isPlayingVoice = false;
+  bool _hasVoiceNote = false;
+  bool _showVoiceOverlay = false;
+
   @override
   void initState() {
     super.initState();
     _connectSocket();
+    _voiceNotePlayer.onPlayerComplete.listen((event) {
+      if (mounted) {
+        setState(() {
+          _isPlayingVoice = false;
+        });
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _voiceNotePlayer.dispose();
+    super.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    try {
+      final success = await VoiceNoteService.instance.startRecording();
+      if (success) {
+        setState(() {
+          _isRecordingVoice = true;
+          _hasVoiceNote = false;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission denied or recording failed'),
+            backgroundColor: AppColors.ludoRed,
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Error starting recording: $e');
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    try {
+      final path = await VoiceNoteService.instance.stopRecording();
+      setState(() {
+        _isRecordingVoice = false;
+        _hasVoiceNote = path != null;
+      });
+    } catch (e) {
+      debugPrint('Error stopping recording: $e');
+      setState(() {
+        _isRecordingVoice = false;
+      });
+    }
+  }
+
+  Future<void> _playVoiceNote() async {
+    final path = VoiceNoteService.instance.lastRecordPath;
+    if (path == null) return;
+    try {
+      if (_isPlayingVoice) {
+        await _voiceNotePlayer.stop();
+        setState(() {
+          _isPlayingVoice = false;
+        });
+      } else {
+        await _voiceNotePlayer.play(ap.DeviceFileSource(path));
+        setState(() {
+          _isPlayingVoice = true;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error playing voice note: $e');
+      setState(() {
+        _isPlayingVoice = false;
+      });
+    }
   }
 
   void _connectSocket() {
@@ -117,6 +198,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           TextButton(
             onPressed: () {
               AudioService.instance.playButtonClick();
+              TtsService.instance.speak("Cancel");
               Navigator.pop(context);
             },
             child: const Text('Cancel'),
@@ -124,6 +206,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ElevatedButton(
             onPressed: () {
               AudioService.instance.playButtonClick();
+              TtsService.instance.speak("Join");
               final code = codeController.text.trim();
               if (code.isNotEmpty) {
                 ref.read(socketServiceProvider).joinRoom(code);
@@ -156,14 +239,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   Radio<int>(
                     value: 2,
                     groupValue: selectedPlayers,
-                    onChanged: (val) => setDialogState(() => selectedPlayers = val!),
+                    onChanged: (val) {
+                      TtsService.instance.speak("Two players");
+                      setDialogState(() => selectedPlayers = val!);
+                    },
                   ),
                   const Text('2 Players'),
                   const SizedBox(width: 16),
                   Radio<int>(
                     value: 4,
                     groupValue: selectedPlayers,
-                    onChanged: (val) => setDialogState(() => selectedPlayers = val!),
+                    onChanged: (val) {
+                      TtsService.instance.speak("Four players");
+                      setDialogState(() => selectedPlayers = val!);
+                    },
                   ),
                   const Text('4 Players'),
                 ],
@@ -179,7 +268,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Text('$fee Coins'),
                   );
                 }).toList(),
-                onChanged: (val) => setDialogState(() => entryFee = val!),
+                onChanged: (val) {
+                  if (val != null) {
+                    TtsService.instance.speak("$val coins");
+                    setDialogState(() => entryFee = val);
+                  }
+                },
               ),
             ],
           ),
@@ -187,6 +281,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             TextButton(
               onPressed: () {
                 AudioService.instance.playButtonClick();
+                TtsService.instance.speak("Cancel");
                 Navigator.pop(context);
               },
               child: const Text('Cancel'),
@@ -194,6 +289,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             ElevatedButton(
               onPressed: () {
                 AudioService.instance.playButtonClick();
+                TtsService.instance.speak("Create");
                 ref.read(socketServiceProvider).createRoom(selectedPlayers, entryFee);
                 Navigator.pop(context);
               },
@@ -289,127 +385,149 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       // User Info with Rank border
-                      GestureDetector(
-                        onTap: () {
-                          AudioService.instance.playButtonClick();
-                          context.go('/profile');
-                        },
-                        child: Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(2.5),
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                gradient: AppTheme.cyberGradient,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: AppColors.accentNeon.withOpacity(0.3),
-                                    blurRadius: 8,
-                                    spreadRadius: 1,
-                                  ),
-                                ],
-                              ),
-                              child: CircleAvatar(
-                                radius: 22,
-                                backgroundColor: AppColors.surface,
-                                backgroundImage: NetworkImage(user.avatar),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Text(
-                                      user.name,
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.bold,
-                                        fontSize: 16,
-                                        color: Colors.white,
-                                        letterSpacing: 0.5,
-                                      ),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Icon(
-                                      Icons.verified_user_rounded,
-                                      size: 14,
-                                      color: AppColors.accentNeon,
+                      Semantics(
+                        label: 'Gamer Profile: ${user.name}',
+                        hint: 'Double tap to view stats',
+                        button: true,
+                        child: GestureDetector(
+                          onTap: () {
+                            AudioService.instance.playButtonClick();
+                            TtsService.instance.speak("Gamer Profile");
+                            context.go('/profile');
+                          },
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(2.5),
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: AppTheme.cyberGradient,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: AppColors.accentNeon.withOpacity(0.3),
+                                      blurRadius: 8,
+                                      spreadRadius: 1,
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 2),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: AppColors.primary.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(6),
-                                    border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 0.8),
+                                child: CircleAvatar(
+                                  radius: 22,
+                                  backgroundColor: AppColors.surface,
+                                  backgroundImage: NetworkImage(user.avatar),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Text(
+                                        user.name,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          fontSize: 16,
+                                          color: Colors.white,
+                                          letterSpacing: 0.5,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Icon(
+                                        Icons.verified_user_rounded,
+                                        size: 14,
+                                        color: AppColors.accentNeon,
+                                      ),
+                                    ],
                                   ),
-                                  child: Text(
-                                    'LEVEL ${user.level}',
-                                    style: const TextStyle(
-                                      color: AppColors.accentNeon,
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.bold,
+                                  const SizedBox(height: 2),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.primary.withOpacity(0.2),
+                                      borderRadius: BorderRadius.circular(6),
+                                      border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 0.8),
+                                    ),
+                                    child: Text(
+                                      'LEVEL ${user.level}',
+                                      style: const TextStyle(
+                                        color: AppColors.accentNeon,
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.bold,
+                                      ),
                                     ),
                                   ),
-                                ),
-                              ],
-                            ),
-                          ],
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                       
                       // Wallet & Settings
                       Row(
                         children: [
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                            decoration: BoxDecoration(
-                              color: AppColors.surface,
-                              borderRadius: BorderRadius.circular(24),
-                              border: Border.all(color: AppColors.gold.withOpacity(0.4)),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: AppColors.gold.withOpacity(0.1),
-                                  blurRadius: 6,
-                                  offset: const Offset(0, 2),
-                                ),
-                              ],
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 18),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '${user.coins}',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 14,
-                                    color: Colors.white,
+                          Semantics(
+                            label: 'Ludo Coins Balance',
+                            value: '${user.coins} coins',
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                              decoration: BoxDecoration(
+                                color: AppColors.surface,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: AppColors.gold.withOpacity(0.4)),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.gold.withOpacity(0.1),
+                                    blurRadius: 6,
+                                    offset: const Offset(0, 2),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 18),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '${user.coins}',
+                                    style: const TextStyle(
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                           const SizedBox(width: 8),
                           if (user.isAdmin) ...[
-                            IconButton(
-                              icon: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.secondary),
-                              tooltip: 'Open Admin Control Panel',
-                              onPressed: () {
-                                AudioService.instance.playButtonClick();
-                                context.go('/admin');
-                              },
+                            Semantics(
+                              label: 'Admin Control Panel Button',
+                              hint: 'Double tap to open admin panel',
+                              button: true,
+                              child: IconButton(
+                                icon: const Icon(Icons.admin_panel_settings_rounded, color: AppColors.secondary),
+                                tooltip: 'Open Admin Control Panel',
+                                onPressed: () {
+                                  AudioService.instance.playButtonClick();
+                                  TtsService.instance.speak("Admin Control Panel");
+                                  context.go('/admin');
+                                },
+                              ),
                             ),
                           ],
-                          IconButton(
-                            icon: const Icon(Icons.settings_suggest_rounded, color: Colors.white),
-                            onPressed: () {
-                              AudioService.instance.playButtonClick();
-                              context.go('/settings');
-                            },
+                          Semantics(
+                            label: 'Settings Button',
+                            hint: 'Double tap to open settings',
+                            button: true,
+                            child: IconButton(
+                              icon: const Icon(Icons.settings_suggest_rounded, color: Colors.white),
+                              onPressed: () {
+                                AudioService.instance.playButtonClick();
+                                TtsService.instance.speak("Settings");
+                                context.go('/settings');
+                              },
+                            ),
                           ),
                         ],
                       ),
@@ -419,64 +537,68 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   const SizedBox(height: 16),
                   
                   // XP Progress Bar
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'RANK PROGRESS',
-                            style: TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.textSecondary,
-                              letterSpacing: 1.0,
+                  Semantics(
+                    label: 'Rank Progress Bar',
+                    value: '${xpInLevel.toInt()} out of 1000 experience points',
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              'RANK PROGRESS',
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.textSecondary,
+                                letterSpacing: 1.0,
+                              ),
                             ),
-                          ),
-                          Text(
-                            '${xpInLevel.toInt()}/1000 XP',
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.bold,
-                              color: AppColors.secondary,
+                            Text(
+                              '${xpInLevel.toInt()}/1000 XP',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppColors.secondary,
+                              ),
                             ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      ClipRRect(
-                        borderRadius: BorderRadius.circular(8),
-                        child: Container(
-                          height: 8,
-                          color: AppColors.surface,
-                          child: Stack(
-                            children: [
-                              Positioned.fill(
-                                child: Align(
-                                  alignment: Alignment.centerLeft,
-                                  child: FractionallySizedBox(
-                                    widthFactor: xpProgress,
-                                    child: Container(
-                                      decoration: const BoxDecoration(
-                                        gradient: AppTheme.purplePinkGradient,
-                                        boxShadow: [
-                                          BoxShadow(
-                                            color: AppColors.secondary,
-                                            blurRadius: 4,
-                                            spreadRadius: 1,
-                                          )
-                                        ]
+                          ],
+                        ),
+                        const SizedBox(height: 6),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Container(
+                            height: 8,
+                            color: AppColors.surface,
+                            child: Stack(
+                              children: [
+                                Positioned.fill(
+                                  child: Align(
+                                    alignment: Alignment.centerLeft,
+                                    child: FractionallySizedBox(
+                                      widthFactor: xpProgress,
+                                      child: Container(
+                                        decoration: const BoxDecoration(
+                                          gradient: AppTheme.purplePinkGradient,
+                                          boxShadow: [
+                                            BoxShadow(
+                                              color: AppColors.secondary,
+                                              blurRadius: 4,
+                                              spreadRadius: 1,
+                                            )
+                                          ]
+                                        ),
                                       ),
                                     ),
                                   ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
+                      ],
+                    ),
                   )
                   .animate()
                   .fade(duration: 400.ms, delay: 100.ms),
@@ -635,7 +757,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     ],
                   ).animate().fade(delay: 400.ms).slideY(begin: 0.05, end: 0),
 
-                  const SizedBox(height: 24),
+                  const SizedBox(height: 16),
+
+                  // Local Multiplayer Card
+                  _buildLocalMultiplayerCard().animate().fade(delay: 420.ms).slideY(begin: 0.05, end: 0),
+
+                  const SizedBox(height: 16),
 
                   // Bot Selector Card
                   _buildBotSelector().animate().fade(delay: 450.ms).slideY(begin: 0.05, end: 0),
@@ -672,7 +799,30 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           // Matchmaking Modal Overlay
           if (_isMatching)
             _buildMatchmakingOverlay().animate().fade(duration: 300.ms),
+
+          // Voice Note Overlay / Panel
+          if (_showVoiceOverlay)
+            _buildVoiceOverlayPanel(),
         ],
+      ),
+      floatingActionButton: _isMatching ? null : Semantics(
+        label: 'Voice Note Recorder',
+        hint: 'Double tap to open the client-side local voice note recorder panel',
+        button: true,
+        child: FloatingActionButton(
+          onPressed: () {
+            AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Voice Recorder");
+            setState(() {
+              _showVoiceOverlay = !_showVoiceOverlay;
+            });
+          },
+          backgroundColor: AppColors.secondary,
+          child: Icon(
+            _showVoiceOverlay ? Icons.close : Icons.mic_rounded,
+            color: Colors.white,
+          ),
+        ),
       ),
     );
   }
@@ -685,30 +835,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required Gradient gradient,
     required VoidCallback onTap,
   }) {
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
-        boxShadow: [
-          BoxShadow(
-            color: color.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
-      ),
-      child: Card(
-        margin: EdgeInsets.zero,
-        shape: RoundedRectangleBorder(
+    return Semantics(
+      label: 'Game Mode Card: $title',
+      hint: 'Double tap to play $subtitle',
+      button: true,
+      child: Container(
+        decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: color.withOpacity(0.3), width: 1.5),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.2),
+              blurRadius: 10,
+              offset: const Offset(0, 4),
+            ),
+          ],
         ),
-        child: InkWell(
-          onTap: () {
-            AudioService.instance.playButtonClick();
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(20),
-          child: Container(
+        child: Card(
+          margin: EdgeInsets.zero,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: color.withOpacity(0.3), width: 1.5),
+          ),
+          child: InkWell(
+            onTap: () {
+              AudioService.instance.playButtonClick();
+              TtsService.instance.speak(title);
+              onTap();
+            },
+            borderRadius: BorderRadius.circular(20),
+            child: Container(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(20),
@@ -750,8 +905,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildActionNav({
     required String title,
@@ -759,18 +915,23 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     required Color color,
     required VoidCallback onTap,
   }) {
-    return Card(
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16),
-        side: BorderSide(color: color.withOpacity(0.2), width: 1.2),
-      ),
-      child: InkWell(
-        onTap: () {
-          AudioService.instance.playButtonClick();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(16),
-        child: Padding(
+    return Semantics(
+      label: 'Navigation: $title',
+      hint: 'Double tap to open the $title screen',
+      button: true,
+      child: Card(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: color.withOpacity(0.2), width: 1.2),
+        ),
+        child: InkWell(
+          onTap: () {
+            AudioService.instance.playButtonClick();
+            TtsService.instance.speak(title);
+            onTap();
+          },
+          borderRadius: BorderRadius.circular(16),
+          child: Padding(
           padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
@@ -790,8 +951,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildBotSelector() {
     return Card(
@@ -839,24 +1001,445 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Widget _buildDifficultyBtn(String label, Color color, VoidCallback onTap) {
-    return OutlinedButton(
-      onPressed: () {
-        AudioService.instance.playButtonClick();
-        onTap();
-      },
-      style: OutlinedButton.styleFrom(
-        side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
-        foregroundColor: color,
-        backgroundColor: color.withOpacity(0.04),
-        padding: const EdgeInsets.symmetric(vertical: 14),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+    return Semantics(
+      label: 'Practice Mode Difficulty: $label',
+      hint: 'Double tap to start an offline match against a $label AI bot',
+      button: true,
+      child: OutlinedButton(
+        onPressed: () {
+          AudioService.instance.playButtonClick();
+          TtsService.instance.speak("$label difficulty");
+          onTap();
+        },
+        style: OutlinedButton.styleFrom(
+          side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
+          foregroundColor: color,
+          backgroundColor: color.withOpacity(0.04),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: Text(
+          label,
+          style: GoogleFonts.outfit(
+            fontWeight: FontWeight.bold,
+            fontSize: 12,
+            letterSpacing: 0.8,
+          ),
+        ),
       ),
-      child: Text(
-        label,
-        style: GoogleFonts.outfit(
-          fontWeight: FontWeight.bold,
-          fontSize: 12,
-          letterSpacing: 0.8,
+    );
+  }
+
+  Widget _buildLocalMultiplayerCard() {
+    return Container(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(20),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.purple.withOpacity(0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Card(
+        margin: EdgeInsets.zero,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: Colors.purple.withOpacity(0.3), width: 1.5),
+        ),
+        child: InkWell(
+          onTap: () {
+            AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Local Multiplayer Mode");
+            _showLocalMultiplayerDialog();
+          },
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            padding: const EdgeInsets.all(20),
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(20),
+              gradient: LinearGradient(
+                colors: [AppColors.cardBg, AppColors.surface.withOpacity(0.85)],
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    gradient: const LinearGradient(
+                      colors: [Color(0xFF8A2387), Color(0xFFE94057)],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.purple.withOpacity(0.4),
+                        blurRadius: 12,
+                        spreadRadius: 1,
+                      )
+                    ]
+                  ),
+                  child: const Icon(Icons.phone_android_rounded, size: 28, color: Colors.white),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Local Multiplayer',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Pass & Play with friends on this device offline',
+                        style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+                      ),
+                    ],
+                  ),
+                ),
+                const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.textSecondary),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showLocalMultiplayerDialog() {
+    int playerCount = 4;
+    final List<TextEditingController> controllers = [
+      TextEditingController(text: 'Player 1'),
+      TextEditingController(text: 'Player 2'),
+      TextEditingController(text: 'Player 3'),
+      TextEditingController(text: 'Player 4'),
+    ];
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: Colors.purple.withOpacity(0.4), width: 1.5),
+            ),
+            title: Text(
+              'Local Multiplayer Setup',
+              style: GoogleFonts.outfit(
+                fontWeight: FontWeight.bold,
+                fontSize: 20,
+                color: Colors.white,
+              ),
+            ),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Choose Player Count',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [2, 3, 4].map((count) {
+                      final isSelected = playerCount == count;
+                      return ChoiceChip(
+                        label: Text('$count Players', style: TextStyle(color: isSelected ? Colors.white : Colors.white70)),
+                        selected: isSelected,
+                        selectedColor: Colors.purple,
+                        backgroundColor: AppColors.cardBg,
+                        onSelected: (selected) {
+                          if (selected) {
+                            TtsService.instance.speak('$count players');
+                            setDialogState(() {
+                              playerCount = count;
+                            });
+                          }
+                        },
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 20),
+                  Text(
+                    'Player Names',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                      color: Colors.white70,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  ...List.generate(playerCount, (index) {
+                    final colors = ['Red', 'Green', 'Yellow', 'Blue'];
+                    final colorVals = [
+                      AppColors.ludoRed,
+                      AppColors.ludoGreen,
+                      AppColors.ludoYellow,
+                      AppColors.ludoBlue,
+                    ];
+                    final colorName = colors[index];
+                    final colorVal = colorVals[index];
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 16,
+                            height: 16,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: colorVal,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: TextField(
+                              controller: controllers[index],
+                              style: const TextStyle(color: Colors.white, fontSize: 14),
+                              decoration: InputDecoration(
+                                labelText: '$colorName Player Name',
+                                labelStyle: const TextStyle(color: Colors.white54, fontSize: 12),
+                                enabledBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(color: Colors.white24),
+                                ),
+                                focusedBorder: const UnderlineInputBorder(
+                                  borderSide: BorderSide(color: Colors.purple),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () {
+                  AudioService.instance.playButtonClick();
+                  TtsService.instance.speak("Cancel");
+                  Navigator.pop(context);
+                },
+                child: Text('Cancel', style: TextStyle(color: Colors.white.withOpacity(0.7))),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  AudioService.instance.playButtonClick();
+                  TtsService.instance.speak("Start Match");
+                  
+                  // Extract player details
+                  final List<String> names = [];
+                  for (int i = 0; i < playerCount; i++) {
+                    final name = controllers[i].text.trim();
+                    names.add(name.isNotEmpty ? name : 'Player ${i + 1}');
+                  }
+
+                  Navigator.pop(context);
+                  _startLocalMultiplayerMatch(playerCount, names);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.purple,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: const Text('START MATCH'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _startLocalMultiplayerMatch(int playerCount, List<String> names) {
+    final mockRoomCode = 'LOCAL_${DateTime.now().millisecondsSinceEpoch}';
+    final List<String> activeColors = [];
+    final List<Map<String, dynamic>> players = [];
+    final Map<String, List<int>> pawns = {};
+
+    final colors = ['Red', 'Green', 'Yellow', 'Blue'];
+
+    for (int i = 0; i < playerCount; i++) {
+      final colorName = colors[i];
+      activeColors.add(colorName);
+      players.add({
+        'userId': 'local_p${i + 1}',
+        'name': names[i],
+        'avatar': 'https://api.dicebear.com/7.x/pixel-art/png?seed=${names[i]}',
+        'color': colorName,
+        'isBot': false,
+        'active': true
+      });
+      pawns[colorName] = [0, 0, 0, 0];
+    }
+
+    final mockGameState = {
+      'roomCode': mockRoomCode,
+      'players': players,
+      'colors': activeColors,
+      'activeColor': 'Red',
+      'diceValue': null,
+      'rollState': 'idle',
+      'consecutiveSixes': 0,
+      'pawns': pawns,
+      'winner': null,
+      'history': []
+    };
+
+    context.go('/game', extra: {
+      'roomCode': mockRoomCode,
+      'gameState': mockGameState
+    });
+  }
+
+  Widget _buildVoiceOverlayPanel() {
+    return Container(
+      color: Colors.black.withOpacity(0.75),
+      child: Center(
+        child: Container(
+          margin: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.all(24),
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(color: AppColors.accentNeon.withOpacity(0.5), width: 2),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.accentNeon.withOpacity(0.25),
+                blurRadius: 20,
+                spreadRadius: 2,
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'VOICE MEMO RECORDER',
+                    style: GoogleFonts.outfit(
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                      color: Colors.white,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close, color: Colors.white),
+                    onPressed: () {
+                      AudioService.instance.playButtonClick();
+                      TtsService.instance.speak("Close");
+                      setState(() {
+                        _showVoiceOverlay = false;
+                      });
+                    },
+                  ),
+                ],
+              ),
+              const Divider(color: Colors.white24, height: 24),
+              const SizedBox(height: 12),
+              if (_isRecordingVoice) ...[
+                const Icon(
+                  Icons.fiber_manual_record,
+                  color: AppColors.ludoRed,
+                  size: 54,
+                )
+                    .animate(onPlay: (c) => c.repeat(reverse: true))
+                    .scale(begin: const Offset(1, 1), end: const Offset(1.3, 1.3), duration: 600.ms),
+                const SizedBox(height: 16),
+                const Text(
+                  'Recording Audio...',
+                  style: TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                Semantics(
+                  label: 'Stop Recording Button',
+                  hint: 'Double tap to stop recording and save the voice note locally',
+                  button: true,
+                  child: ElevatedButton.icon(
+                    onPressed: () {
+                      AudioService.instance.playButtonClick();
+                      TtsService.instance.speak("Stop recording");
+                      _stopRecording();
+                    },
+                    icon: const Icon(Icons.stop),
+                    label: const Text('STOP RECORDING'),
+                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.ludoRed),
+                  ),
+                ),
+              ] else ...[
+                const Icon(
+                  Icons.mic,
+                  color: AppColors.accentNeon,
+                  size: 54,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  _hasVoiceNote ? 'Voice note recorded successfully!' : 'No voice note recorded yet.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 14),
+                ),
+                const SizedBox(height: 24),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    Semantics(
+                      label: 'Start Recording Button',
+                      hint: 'Double tap to start recording a new voice note',
+                      button: true,
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          AudioService.instance.playButtonClick();
+                          TtsService.instance.speak("Record voice memo");
+                          _startRecording();
+                        },
+                        icon: const Icon(Icons.mic),
+                        label: const Text('RECORD'),
+                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
+                      ),
+                    ),
+                    if (_hasVoiceNote)
+                      Semantics(
+                        label: _isPlayingVoice ? 'Stop Playback Button' : 'Play Voice Note Button',
+                        hint: _isPlayingVoice
+                            ? 'Double tap to stop playing the voice note'
+                            : 'Double tap to play back the recorded voice note',
+                        button: true,
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            AudioService.instance.playButtonClick();
+                            TtsService.instance.speak(_isPlayingVoice ? "Stop playback" : "Play voice note");
+                            _playVoiceNote();
+                          },
+                          icon: Icon(_isPlayingVoice ? Icons.stop : Icons.play_arrow),
+                          label: Text(_isPlayingVoice ? 'STOP' : 'PLAY'),
+                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.tokenGreen),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+              const SizedBox(height: 12),
+            ],
+          ),
         ),
       ),
     );
@@ -940,6 +1523,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ElevatedButton(
                 onPressed: () {
                   AudioService.instance.playButtonClick();
+                  TtsService.instance.speak("Cancel matchmaking");
                   _cancelMatchmaking();
                 },
                 style: ElevatedButton.styleFrom(

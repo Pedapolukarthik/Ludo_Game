@@ -6,6 +6,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../providers/match_history_provider.dart';
 import '../../domain/match_history_item.dart';
 import '../../../../core/services/audio_service.dart';
+import '../../../../core/services/tts_service.dart';
 
 class MatchHistoryScreen extends ConsumerWidget {
   const MatchHistoryScreen({super.key});
@@ -29,6 +30,7 @@ class MatchHistoryScreen extends ConsumerWidget {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
             AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Back to profile");
             context.go('/profile');
           },
         ),
@@ -37,6 +39,7 @@ class MatchHistoryScreen extends ConsumerWidget {
             icon: const Icon(Icons.refresh),
             onPressed: () {
               AudioService.instance.playButtonClick();
+              TtsService.instance.speak("Refresh match history");
               ref.read(matchHistoryProvider.notifier).fetchMatchHistory();
             },
           ),
@@ -53,6 +56,7 @@ class MatchHistoryScreen extends ConsumerWidget {
               ElevatedButton(
                 onPressed: () {
                   AudioService.instance.playButtonClick();
+                  TtsService.instance.speak("Retry");
                   ref.read(matchHistoryProvider.notifier).fetchMatchHistory();
                 },
                 child: const Text('RETRY'),

@@ -68,5 +68,7 @@
 	</array>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>We need microphone access for real-time voice chat with other players during matches.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>We need speech recognition access to enable voice commands like rolling dice and navigating pages.</string>
 </dict>
 </plist>

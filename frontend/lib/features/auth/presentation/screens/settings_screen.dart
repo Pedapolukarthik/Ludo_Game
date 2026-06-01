@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/services/audio_service.dart';
 import '../../../../core/services/local_storage.dart';
+import '../../../../core/services/tts_service.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../providers/auth_provider.dart';
 
@@ -16,12 +17,14 @@ class SettingsScreen extends ConsumerStatefulWidget {
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _musicEnabled = true;
   bool _sfxEnabled = true;
+  bool _voiceAssistanceEnabled = true;
 
   @override
   void initState() {
     super.initState();
     _musicEnabled = LocalStorage.isMusicEnabled();
     _sfxEnabled = LocalStorage.isSfxEnabled();
+    _voiceAssistanceEnabled = LocalStorage.isVoiceAssistanceEnabled();
   }
 
   void _toggleMusic(bool enabled) async {
@@ -38,8 +41,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     AudioService.instance.handleSettingsChanged();
   }
 
+  void _toggleVoiceAssistance(bool enabled) async {
+    AudioService.instance.playButtonClick();
+    setState(() => _voiceAssistanceEnabled = enabled);
+    await LocalStorage.setVoiceAssistanceEnabled(enabled);
+    if (enabled) {
+      TtsService.instance.speak("Voice assistance enabled");
+    } else {
+      // Speak right before turning off
+      TtsService.instance.speak("Voice assistance disabled");
+    }
+  }
+
   void _handleLogout() async {
     AudioService.instance.playButtonClick();
+    TtsService.instance.speak("Logout");
     await ref.read(authProvider.notifier).logout();
     if (mounted) {
       context.go('/login');
@@ -58,6 +74,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
             AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Back to home");
             context.go('/home');
           },
         ),
@@ -82,6 +99,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                   subtitle: const Text('Toggle pawn steps and dice roll alerts'),
                   value: _sfxEnabled,
                   onChanged: _toggleSfx,
+                  activeColor: AppColors.primary,
+                ),
+                const Divider(height: 1, color: Color(0xFF334155)),
+                SwitchListTile(
+                  title: const Text('Voice Assistance'),
+                  subtitle: const Text('Toggle narration of clicked items and dice rolls'),
+                  value: _voiceAssistanceEnabled,
+                  onChanged: _toggleVoiceAssistance,
                   activeColor: AppColors.primary,
                 ),
               ],

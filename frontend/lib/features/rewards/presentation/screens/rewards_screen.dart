@@ -8,6 +8,7 @@ import 'package:lottie/lottie.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/audio_service.dart';
+import '../../../../core/services/tts_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/missions_widget.dart';
 import '../providers/missions_provider.dart';
@@ -244,6 +245,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                       child: ElevatedButton(
                         onPressed: () {
                           AudioService.instance.playButtonClick();
+                          TtsService.instance.speak("Awesome");
                           Navigator.pop(context);
                         },
                         style: ElevatedButton.styleFrom(
@@ -431,6 +433,7 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                       icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
                       onPressed: () {
                         AudioService.instance.playButtonClick();
+                        TtsService.instance.speak("Back to home");
                         context.go('/home');
                       },
                     ),
@@ -521,7 +524,10 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton(
-                          onPressed: _dailyClaimed ? null : _claimDailyReward,
+                          onPressed: _dailyClaimed ? null : () {
+                            TtsService.instance.speak("Claim Coins and X P");
+                            _claimDailyReward();
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.ludoGreen,
                             disabledBackgroundColor: const Color(0xFF1E293B),
@@ -791,7 +797,10 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                         width: double.infinity,
                         height: 52,
                         child: ElevatedButton(
-                          onPressed: (_spinClaimed || _isSpinning) ? null : _spinWheel,
+                          onPressed: (_spinClaimed || _isSpinning) ? null : () {
+                            TtsService.instance.speak("Spin Wheel");
+                            _spinWheel();
+                          },
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.primary,
                             disabledBackgroundColor: const Color(0xFF1E293B),

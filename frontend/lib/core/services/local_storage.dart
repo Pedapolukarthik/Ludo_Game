@@ -68,6 +68,14 @@ class LocalStorage {
     return _prefs.getBool('sfx_enabled') ?? true;
   }
 
+  static Future<void> setVoiceAssistanceEnabled(bool enabled) async {
+    await _prefs.setBool('voice_assistance_enabled', enabled);
+  }
+
+  static bool isVoiceAssistanceEnabled() {
+    return _prefs.getBool('voice_assistance_enabled') ?? true;
+  }
+
   static Future<void> clearAll() async {
     final box = Hive.box(authBoxName);
     await box.clear();

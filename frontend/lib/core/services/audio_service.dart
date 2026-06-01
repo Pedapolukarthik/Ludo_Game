@@ -60,14 +60,20 @@ class AudioService {
   /// Play dice rolling sound
   void playDiceRoll() => _playSfx('dice_roll.mp3');
 
+  /// Play distinct sound when a 6 is rolled
+  void playRollSix() => _playVictory('Reward_claims.mp3');
+
   /// Play pawn move step sound
   void playPawnMove() => _playSfx('pawn_move.mp3');
 
   /// Play pawn capture sound
-  void playPawnCapture() => _playSfx('pawn_capture.mp3');
+  void playPawnCapture() => _playSfx('wheel_spin.mp3');
 
   /// Play goal reached sound
   void playGoalReached() => _playSfx('goal_reached.mp3');
+
+  /// Play safe zone reached sound
+  void playSafeZone() => _playSfx('goal_reached.mp3');
 
   /// Play winning celebration sound
   void playWin() => _playVictory('Victory.mp3');

@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/audio_service.dart';
+import '../../../../core/services/tts_service.dart';
 
 class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
@@ -66,6 +67,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
           icon: const Icon(Icons.arrow_back_ios_new_rounded),
           onPressed: () {
             AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Back to home");
             context.go('/home');
           },
         ),
@@ -179,6 +181,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
     return InkWell(
       onTap: () {
         AudioService.instance.playButtonClick();
+        TtsService.instance.speak("Sort by $label");
         onTap();
       },
       borderRadius: BorderRadius.circular(12),

@@ -5,6 +5,7 @@ import 'firebase_options.dart';
 import 'core/routing/app_router.dart';
 import 'core/services/audio_service.dart';
 import 'core/services/local_storage.dart';
+import 'core/services/tts_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
@@ -24,6 +25,9 @@ void main() async {
   
   // Initialize AudioService
   await AudioService.instance.init();
+
+  // Initialize TtsService
+  await TtsService.instance.init();
 
   runApp(
     const ProviderScope(

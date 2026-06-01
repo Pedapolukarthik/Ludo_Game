@@ -159,22 +159,22 @@ const incrementMissionProgressHelper = async (user, missionType, incrementAmount
     user.dailyMissions.winMatchesCount += incrementAmount;
     if (user.dailyMissions.winMatchesCount >= 2 && !user.dailyMissions.winMatchesClaimed) {
       user.dailyMissions.winMatchesClaimed = true;
-      coinsReward = 200;
-      xpReward = 100;
+      coinsReward = 350;
+      xpReward = 150;
     }
   } else if (missionType === 'play_matches') {
     user.dailyMissions.playMatchesCount += incrementAmount;
     if (user.dailyMissions.playMatchesCount >= 3 && !user.dailyMissions.playMatchesClaimed) {
       user.dailyMissions.playMatchesClaimed = true;
-      coinsReward = 150;
-      xpReward = 80;
+      coinsReward = 250;
+      xpReward = 120;
     }
   } else if (missionType === 'spin_wheel') {
     user.dailyMissions.spunWheelCount += incrementAmount;
     if (user.dailyMissions.spunWheelCount >= 1 && !user.dailyMissions.spunWheelClaimed) {
       user.dailyMissions.spunWheelClaimed = true;
-      coinsReward = 100;
-      xpReward = 50;
+      coinsReward = 150;
+      xpReward = 80;
     }
   }
 
@@ -233,8 +233,8 @@ const getDailyMissions = async (req, res) => {
         description: 'Win 2 classic or quick matches online',
         progress: dm.winMatchesCount,
         goal: 2,
-        coins: 200,
-        xp: 100,
+        coins: 350,
+        xp: 150,
         completed: dm.winMatchesClaimed
       },
       {
@@ -243,8 +243,8 @@ const getDailyMissions = async (req, res) => {
         description: 'Play 3 games to completion (vs online players or AI)',
         progress: dm.playMatchesCount,
         goal: 3,
-        coins: 150,
-        xp: 80,
+        coins: 250,
+        xp: 120,
         completed: dm.playMatchesClaimed
       },
       {
@@ -253,8 +253,8 @@ const getDailyMissions = async (req, res) => {
         description: 'Spin the rewards wheel once',
         progress: dm.spunWheelCount,
         goal: 1,
-        coins: 100,
-        xp: 50,
+        coins: 150,
+        xp: 80,
         completed: dm.spunWheelClaimed
       }
     ];

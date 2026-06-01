@@ -12,6 +12,8 @@ import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/ludo_coordinates.dart';
+import '../../../../core/services/voice_command_service.dart';
+import '../../../../core/services/tts_service.dart';
 
 class GameRoomScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -30,6 +32,7 @@ class GameRoomScreen extends ConsumerStatefulWidget {
 class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProviderStateMixin {
   // Game states
   bool _isOffline = false;
+  bool _isLocalMultiplayer = false;
   late String _activeColor;
   late String _rollState; // 'idle', 'rolled', 'moving'
   int? _diceValue;
@@ -60,7 +63,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   @override
   void initState() {
     super.initState();
-    _isOffline = widget.roomCode.startsWith('BOT_');
+    _isOffline = widget.roomCode.startsWith('BOT_') || widget.roomCode.startsWith('LOCAL_');
+    _isLocalMultiplayer = widget.roomCode.startsWith('LOCAL_');
     
     // Setup dice controller
     _diceController = AnimationController(
@@ -71,18 +75,27 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     _parseGameState(widget.initialGameState);
 
     if (_isOffline) {
-      _botDifficulty = widget.roomCode.split('_').last.toLowerCase();
-      _addHistoryMessage('Local practice game started vs AI ($_botDifficulty)');
+      if (_isLocalMultiplayer) {
+        _addHistoryMessage('Local multiplayer match started');
+      } else {
+        _botDifficulty = widget.roomCode.split('_').last.toLowerCase();
+        _addHistoryMessage('Local practice game started vs AI ($_botDifficulty)');
+      }
     } else {
       _setupSocketListeners();
     }
 
     // Pause background lobby music during active match
     AudioService.instance.pauseBgm();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _startVoiceCommands();
+    });
   }
 
   @override
   void dispose() {
+    VoiceCommandService.instance.stopListening();
     // Resume background lobby music when leaving match
     AudioService.instance.resumeBgm();
     _lkRoom?.disconnect();
@@ -90,6 +103,21 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     _diceController.dispose();
     _chatController.dispose();
     super.dispose();
+  }
+
+  void _startVoiceCommands() {
+    VoiceCommandService.instance.startListening({
+      'roll': () {
+        if (mounted) {
+          _onDiceBoxTapped();
+        }
+      },
+      'dice': () {
+        if (mounted) {
+          _onDiceBoxTapped();
+        }
+      },
+    });
   }
 
   void _parseGameState(Map<String, dynamic> state) {
@@ -109,7 +137,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       });
       
       // Recalculate possible moves for current local user if offline
-      if (_isOffline && _activeColor == 'Red' && _rollState == 'rolled' && _diceValue != null) {
+      if (_isOffline && (_isLocalMultiplayer || _activeColor == 'Red') && _rollState == 'rolled' && _diceValue != null) {
         _calculateOfflinePossibleMoves();
       } else if (!_isOffline) {
         // If online, potential moves list is sent by server in socket responses
@@ -136,6 +164,10 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         _diceController.reset();
         _diceController.forward();
         _playSfx('roll');
+
+        final localColor = _getLocalPlayerColor();
+        final String speakText = (data['color'] == localColor) ? 'You rolled ${data['value']}' : '${data['color']} rolled ${data['value']}';
+        TtsService.instance.speak(speakText);
         
         if (data['forfeit'] == true) {
           _addHistoryMessage('$_activeColor forfeits turn (consecutive sixes limit)');
@@ -150,6 +182,14 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         _playSfx('move');
         if (data['isKill'] == true) _playSfx('capture');
         if (data['isGoal'] == true) _playSfx('goal');
+        
+        final move = data['move'];
+        if (move != null && move['to'] != null) {
+          final int toStep = move['to'];
+          if (toStep < 57 && _isStepSafe(_activeColor, toStep)) {
+            _playSfx('safe');
+          }
+        }
         
         _parseGameState(data['gameState']);
       }
@@ -286,7 +326,12 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       _playSfx('roll');
     });
 
-    _addHistoryMessage('$_activeColor rolled a $_diceValue');
+    final activePlayer = _findPlayerByColor(_activeColor);
+    final String activePlayerName = activePlayer['name'] ?? _activeColor;
+    final String speakText = '$activePlayerName rolled $_diceValue';
+    TtsService.instance.speak(speakText);
+
+    _addHistoryMessage('$activePlayerName rolled a $_diceValue');
 
     if (_diceValue == 6) {
       // Local consecutive check is omitted for simplicity in practice, or capped
@@ -295,7 +340,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     _calculateOfflinePossibleMoves();
 
     // If bot rolled, perform automated decision
-    if (_activeColor == 'Green') {
+    if (_activeColor == 'Green' && !_isLocalMultiplayer) {
       Future.delayed(const Duration(milliseconds: 1200), _executeBotPawnSelection);
     }
   }
@@ -335,11 +380,17 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     }
 
     if (isKill) _playSfx('capture');
-    if (move['to'] == 57) _playSfx('goal');
+    if (move['to'] == 57) {
+      _playSfx('goal');
+    } else if (_isStepSafe(_activeColor, move['to'])) {
+      _playSfx('safe');
+    }
 
     // Win check
     if (_pawns[_activeColor]!.every((s) => s == 57)) {
-      _showWinnerDialog(_activeColor == 'Red' ? 'You' : 'Bot Green', _activeColor);
+      final activePlayer = _findPlayerByColor(_activeColor);
+      final String winnerName = activePlayer['name'] ?? _activeColor;
+      _showWinnerDialog(winnerName, _activeColor);
       return;
     }
 
@@ -351,8 +402,10 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         _diceValue = null;
         _rollState = 'idle';
       });
-      _addHistoryMessage('$_activeColor gets an extra roll!');
-      if (_activeColor == 'Green') {
+      final activePlayer = _findPlayerByColor(_activeColor);
+      final String activePlayerName = activePlayer['name'] ?? _activeColor;
+      _addHistoryMessage('$activePlayerName gets an extra roll!');
+      if (_activeColor == 'Green' && !_isLocalMultiplayer) {
         Future.delayed(const Duration(milliseconds: 1000), _rollOfflineDice);
       }
     } else {
@@ -365,10 +418,13 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       _diceValue = null;
       _rollState = 'idle';
       _possibleMoves = [];
-      _activeColor = _activeColor == 'Red' ? 'Green' : 'Red';
+      
+      // Dynamic turn rotation based on active color list
+      int nextIdx = (_colors.indexOf(_activeColor) + 1) % _colors.length;
+      _activeColor = _colors[nextIdx];
     });
 
-    if (_activeColor == 'Green') {
+    if (_activeColor == 'Green' && !_isLocalMultiplayer) {
       // Bot turn
       Future.delayed(const Duration(milliseconds: 1000), _rollOfflineDice);
     }
@@ -485,6 +541,13 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     return safes.contains(idx);
   }
 
+  bool _isStepSafe(String color, int step) {
+    if (step >= 52) return true;
+    final trackIdx = _getGeneralTrackIndex(color, step);
+    if (trackIdx == null) return false;
+    return _isSafeTrackIndex(trackIdx);
+  }
+
   bool _isUnderThreatLocal(String color, int step) {
     if (step < 1 || step > 51) return false;
     final int? trackIdx = _getGeneralTrackIndex(color, step);
@@ -509,6 +572,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   // --- UI Interactivity Trigger Helpers ---
 
   String _getLocalPlayerColor() {
+    if (_isLocalMultiplayer) return _activeColor;
     if (_isOffline) return 'Red';
     final user = ref.read(authProvider).user;
     if (user == null) return 'Red';
@@ -520,6 +584,15 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       }
     }
     return me?['color'] ?? 'Red';
+  }
+
+  Map<String, dynamic> _findPlayerByColor(String color) {
+    for (var p in _players) {
+      if (p is Map && p['color'] == color) {
+        return Map<String, dynamic>.from(p);
+      }
+    }
+    return <String, dynamic>{};
   }
 
   bool _isLocalPlayerTurn() {
@@ -543,6 +616,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final isSelectable = _possibleMoves.any((m) => m['pawnId'] == pawnId);
     if (!isSelectable) return;
 
+    TtsService.instance.speak("Moving pawn ${pawnId + 1}");
+
     if (_isOffline) {
       _moveOfflinePawn(pawnId);
     } else {
@@ -556,13 +631,19 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     if (!LocalStorage.isSfxEnabled()) return;
     // Call the actual audio service triggers
     if (type == 'roll') {
-      AudioService.instance.playDiceRoll();
+      if (_diceValue == 6) {
+        AudioService.instance.playRollSix();
+      } else {
+        AudioService.instance.playDiceRoll();
+      }
     } else if (type == 'move') {
       AudioService.instance.playPawnMove();
     } else if (type == 'capture') {
       AudioService.instance.playPawnCapture();
     } else if (type == 'goal') {
       AudioService.instance.playGoalReached();
+    } else if (type == 'safe') {
+      AudioService.instance.playSafeZone();
     }
   }
 
@@ -577,6 +658,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   void _toggleVoiceChat() async {
     AudioService.instance.playButtonClick();
     if (_isVoiceConnected && _lkRoom != null) {
+      final speakText = !_isVoiceMuted ? "Mute voice chat" : "Unmute voice chat";
+      TtsService.instance.speak(speakText);
       setState(() {
         _isVoiceMuted = !_isVoiceMuted;
       });
@@ -587,6 +670,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         print('Failed to toggle mic state: $e');
       }
     } else {
+      TtsService.instance.speak("Connect voice chat");
       _addHistoryMessage('Connecting to audio channel...');
       ref.read(socketServiceProvider).requestVoiceToken(widget.roomCode);
     }
@@ -596,6 +680,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final text = _chatController.text.trim();
     if (text.isEmpty) return;
     AudioService.instance.playButtonClick();
+    TtsService.instance.speak("Send message");
 
     if (_isOffline) {
       setState(() {
@@ -626,6 +711,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
 
   void _triggerLocalEmojiReaction(String emojiId) {
     AudioService.instance.playButtonClick();
+    TtsService.instance.speak("$emojiId reaction");
     final myColor = _getLocalPlayerColor();
     if (_isOffline) {
       _triggerEmojiReaction(myColor, emojiId);
@@ -718,15 +804,17 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    winnerColor == myColor ? 'VICTORY!' : 'DEFEAT!',
+                    _isLocalMultiplayer 
+                        ? 'GAME OVER'
+                        : (winnerColor == myColor ? 'VICTORY!' : 'DEFEAT!'),
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       fontSize: 28,
-                      color: winnerColor == myColor ? AppColors.ludoGreen : AppColors.ludoRed,
+                      color: (_isLocalMultiplayer || winnerColor == myColor) ? AppColors.ludoGreen : AppColors.ludoRed,
                       letterSpacing: 2,
                       shadows: [
                         Shadow(
-                          color: (winnerColor == myColor ? AppColors.ludoGreen : AppColors.ludoRed).withOpacity(0.5),
+                          color: ((_isLocalMultiplayer || winnerColor == myColor) ? AppColors.ludoGreen : AppColors.ludoRed).withOpacity(0.5),
                           blurRadius: 10,
                         )
                       ],
@@ -745,9 +833,11 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      winnerColor == myColor
-                          ? 'Winnings (+300 XP, Gold Prize Pool) credited to user wallet.'
-                          : 'Rank Rating Adjusted. Better luck next time!',
+                      _isLocalMultiplayer
+                          ? 'Match completed locally! Congratulations to the winner!'
+                          : (winnerColor == myColor
+                              ? 'Winnings (+300 XP, Gold Prize Pool) credited to user wallet.'
+                              : 'Rank Rating Adjusted. Better luck next time!'),
                       textAlign: TextAlign.center,
                       style: const TextStyle(fontSize: 11, color: AppColors.textSecondary),
                     ),
@@ -756,6 +846,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                   ElevatedButton(
                     onPressed: () {
                       AudioService.instance.playButtonClick();
+                      TtsService.instance.speak("Back to lobby");
                       Navigator.pop(context); // Close dialog
                       context.go('/home');
                     },
@@ -810,7 +901,9 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       backgroundColor: AppColors.background,
       appBar: AppBar(
         title: Text(
-          _isOffline ? 'OFFLINE PRACTICE VS AI' : 'MULTIPLAYER ROOM: ${widget.roomCode}',
+          _isLocalMultiplayer
+              ? 'LOCAL MULTIPLAYER'
+              : (_isOffline ? 'OFFLINE PRACTICE VS AI' : 'MULTIPLAYER ROOM: ${widget.roomCode}'),
           style: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.bold),
         ),
         backgroundColor: Colors.transparent,
@@ -819,6 +912,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
           icon: const Icon(Icons.exit_to_app_rounded),
           onPressed: () {
             AudioService.instance.playButtonClick();
+            TtsService.instance.speak("Abandon match dialog");
             // Confirm quit dialog
             showDialog(
               context: context,
@@ -829,6 +923,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                   TextButton(
                     onPressed: () {
                       AudioService.instance.playButtonClick();
+                      TtsService.instance.speak("Resume");
                       Navigator.pop(ctx);
                     },
                     child: const Text('Resume'),
@@ -836,6 +931,7 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                   ElevatedButton(
                     onPressed: () {
                       AudioService.instance.playButtonClick();
+                      TtsService.instance.speak("Forfeit and leave");
                       Navigator.pop(ctx);
                       context.go('/home');
                     },
@@ -1148,45 +1244,51 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         final isTurn = _activeColor == pColor;
         final isSelectable = isTurn && _possibleMoves.any((m) => m['pawnId'] == pId);
 
-        final tokenWidget = GestureDetector(
-          onTap: isSelectable ? () => _onPawnTapped(pId) : null,
-          child: Stack(
-            alignment: Alignment.center,
-            children: [
-              if (isSelectable)
+        final tokenWidget = Semantics(
+          label: '$pColor Pawn ${pId + 1}',
+          value: item['step'] == 0 ? 'Home Yard' : (item['step'] == 57 ? 'Reached Goal' : 'Step ${item['step']}'),
+          hint: isSelectable ? 'Double tap to move this pawn by $_diceValue steps' : 'Pawn not selectable',
+          button: isSelectable,
+          child: GestureDetector(
+            onTap: isSelectable ? () => _onPawnTapped(pId) : null,
+            child: Stack(
+              alignment: Alignment.center,
+              children: [
+                if (isSelectable)
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: Colors.white.withOpacity(0.3),
+                      boxShadow: [
+                        BoxShadow(color: colorVal, blurRadius: 8, spreadRadius: 3),
+                      ],
+                    ),
+                  ).animate(onPlay: (c) => c.repeat()).scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 500.ms),
                 Container(
-                  width: 28,
-                  height: 28,
+                  width: 20,
+                  height: 20,
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: Colors.white.withOpacity(0.3),
-                    boxShadow: [
-                      BoxShadow(color: colorVal, blurRadius: 8, spreadRadius: 3),
+                    gradient: RadialGradient(
+                      colors: [Colors.white, colorVal],
+                      stops: const [0.1, 1.0],
+                    ),
+                    border: Border.all(color: Colors.white, width: 1.5),
+                    boxShadow: const [
+                      BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(1, 2)),
                     ],
                   ),
-                ).animate(onPlay: (c) => c.repeat()).scale(begin: const Offset(1, 1), end: const Offset(1.2, 1.2), duration: 500.ms),
-              Container(
-                width: 20,
-                height: 20,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: RadialGradient(
-                    colors: [Colors.white, colorVal],
-                    stops: const [0.1, 1.0],
-                  ),
-                  border: Border.all(color: Colors.white, width: 1.5),
-                  boxShadow: const [
-                    BoxShadow(color: Colors.black45, blurRadius: 4, offset: Offset(1, 2)),
-                  ],
-                ),
-                child: Center(
-                  child: Text(
-                    '${pId + 1}',
-                    style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black),
+                  child: Center(
+                    child: Text(
+                      '${pId + 1}',
+                      style: const TextStyle(fontSize: 8, fontWeight: FontWeight.bold, color: Colors.black),
+                    ),
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
         );
 
@@ -1278,7 +1380,11 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  isMyTurn ? 'YOUR TURN' : '${_activeColor.toUpperCase()}\'S TURN',
+                  isMyTurn 
+                      ? (_isLocalMultiplayer 
+                          ? '${(_findPlayerByColor(_activeColor)['name'] ?? _activeColor).toUpperCase()}\'S TURN'
+                          : 'YOUR TURN')
+                      : '${_activeColor.toUpperCase()}\'S TURN',
                   style: GoogleFonts.outfit(
                     fontWeight: FontWeight.bold, 
                     fontSize: 16, 
@@ -1298,60 +1404,68 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
           ),
 
           // Right: styled dice box
-          GestureDetector(
-            onTap: _onDiceBoxTapped,
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Highlight ring
-                if (isMyTurn && _rollState == 'idle')
+          Semantics(
+            label: 'Roll Dice Button',
+            hint: isMyTurn 
+                ? (_rollState == 'idle' ? 'Double tap to roll the dice' : 'Dice rolled: $_diceValue. Move your pawn.')
+                : 'Waiting for ${_activeColor.toUpperCase()} to play',
+            value: _diceValue != null ? 'Last rolled value: $_diceValue' : 'Not rolled yet',
+            button: isMyTurn && _rollState == 'idle',
+            child: GestureDetector(
+              onTap: _onDiceBoxTapped,
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  // Highlight ring
+                  if (isMyTurn && _rollState == 'idle')
+                    Container(
+                      width: 76,
+                      height: 76,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(color: activeColorVal.withOpacity(0.35), blurRadius: 16, spreadRadius: 3),
+                        ],
+                      ),
+                    ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.18, 1.18), duration: 500.ms),
+                  
+                  // Dice body (Metallic 3D look with bevel)
                   Container(
-                    width: 76,
-                    height: 76,
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
-                      shape: BoxShape.circle,
+                      color: activeColorVal,
+                      borderRadius: BorderRadius.circular(14),
                       boxShadow: [
-                        BoxShadow(color: activeColorVal.withOpacity(0.35), blurRadius: 16, spreadRadius: 3),
+                        const BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(2, 4)),
+                        BoxShadow(color: activeColorVal.withOpacity(0.5), blurRadius: 8, offset: const Offset(-1, -1)),
                       ],
+                      gradient: LinearGradient(
+                        colors: [
+                          activeColorVal.withOpacity(0.9),
+                          activeColorVal,
+                          activeColorVal.withOpacity(0.7)
+                        ],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      border: Border.all(color: Colors.white.withOpacity(0.4), width: 2.2),
                     ),
-                  ).animate(onPlay: (c) => c.repeat(reverse: true)).scale(begin: const Offset(1, 1), end: const Offset(1.18, 1.18), duration: 500.ms),
-                
-                // Dice body (Metallic 3D look with bevel)
-                Container(
-                  width: 58,
-                  height: 58,
-                  decoration: BoxDecoration(
-                    color: activeColorVal,
-                    borderRadius: BorderRadius.circular(14),
-                    boxShadow: [
-                      const BoxShadow(color: Colors.black45, blurRadius: 6, offset: Offset(2, 4)),
-                      BoxShadow(color: activeColorVal.withOpacity(0.5), blurRadius: 8, offset: const Offset(-1, -1)),
-                    ],
-                    gradient: LinearGradient(
-                      colors: [
-                        activeColorVal.withOpacity(0.9),
-                        activeColorVal,
-                        activeColorVal.withOpacity(0.7)
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    border: Border.all(color: Colors.white.withOpacity(0.4), width: 2.2),
-                  ),
-                  child: Center(
-                    child: AnimatedBuilder(
-                      animation: _diceController,
-                      builder: (context, child) {
-                        return Transform.rotate(
-                          angle: _diceController.value * pi * 4,
-                          child: child,
-                        );
-                      },
-                      child: _buildDiceFaceContent(),
+                    child: Center(
+                      child: AnimatedBuilder(
+                        animation: _diceController,
+                        builder: (context, child) {
+                          return Transform.rotate(
+                            angle: _diceController.value * pi * 4,
+                            child: child,
+                          );
+                        },
+                        child: _buildDiceFaceContent(),
+                      ),
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],

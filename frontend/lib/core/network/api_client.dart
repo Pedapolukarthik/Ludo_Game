@@ -27,39 +27,17 @@ class ApiClient {
       final url = getUrl();
       return await requestFn(url).timeout(const Duration(seconds: 10));
     } on SocketException catch (e) {
-      debugPrint('Network SocketException on initial request: $e');
-      final currentBaseUrl = EnvConfig.baseUrl;
-      if (currentBaseUrl.contains('10.0.2.2') || currentBaseUrl.contains('localhost')) {
-        EnvConfig.useProductionFallback();
-        try {
-          final retryUrl = getUrl();
-          debugPrint('Retrying request with production backend: $retryUrl');
-          return await requestFn(retryUrl).timeout(const Duration(seconds: 10));
-        } catch (retryError) {
-          debugPrint('Retry failed: $retryError');
-        }
-      }
+      debugPrint('Network SocketException: $e');
       return http.Response(
         jsonEncode({
           'success': false,
-          'message': 'Unable to connect to the server. Please verify your connection or local emulator server configuration.',
+          'message': 'Unable to connect to the server. Please verify your internet connection.',
         }),
         503,
         headers: {'content-type': 'application/json'},
       );
     } on TimeoutException catch (e) {
-      debugPrint('Network TimeoutException on initial request: $e');
-      final currentBaseUrl = EnvConfig.baseUrl;
-      if (currentBaseUrl.contains('10.0.2.2') || currentBaseUrl.contains('localhost')) {
-        EnvConfig.useProductionFallback();
-        try {
-          final retryUrl = getUrl();
-          debugPrint('Retrying request with production backend due to timeout: $retryUrl');
-          return await requestFn(retryUrl).timeout(const Duration(seconds: 10));
-        } catch (retryError) {
-          debugPrint('Retry failed: $retryError');
-        }
-      }
+      debugPrint('Network TimeoutException: $e');
       return http.Response(
         jsonEncode({
           'success': false,
@@ -69,7 +47,7 @@ class ApiClient {
         headers: {'content-type': 'application/json'},
       );
     } catch (e) {
-      debugPrint('Network error on initial request: $e');
+      debugPrint('Network error: $e');
       return http.Response(
         jsonEncode({
           'success': false,
