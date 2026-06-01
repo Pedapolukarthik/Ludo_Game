@@ -64,8 +64,6 @@ dependencies:
   flutter_animate: ^4.5.0
   google_fonts: ^6.2.0
   audioplayers: ^6.0.0
-  speech_to_text: ^7.4.0
-  record: ^5.1.2
   path_provider: ^2.1.2
   flutter_tts: ^4.2.5
 
@@ -79,9 +77,6 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
-
-dependency_overrides:
-  record_linux: ^1.0.0
 
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec

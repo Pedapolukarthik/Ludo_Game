@@ -9,9 +9,7 @@ import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/services/audio_service.dart';
-import '../../../../core/services/voice_note_service.dart';
 import '../../../../core/services/tts_service.dart';
-import 'package:audioplayers/audioplayers.dart' as ap;
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -25,88 +23,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   int _matchingCount = 0;
   String _activeMatchMode = '2 Players';
 
-  final ap.AudioPlayer _voiceNotePlayer = ap.AudioPlayer();
-  bool _isRecordingVoice = false;
-  bool _isPlayingVoice = false;
-  bool _hasVoiceNote = false;
-  bool _showVoiceOverlay = false;
-
   @override
   void initState() {
     super.initState();
     _connectSocket();
-    _voiceNotePlayer.onPlayerComplete.listen((event) {
-      if (mounted) {
-        setState(() {
-          _isPlayingVoice = false;
-        });
-      }
-    });
   }
 
   @override
   void dispose() {
-    _voiceNotePlayer.dispose();
     super.dispose();
-  }
-
-  Future<void> _startRecording() async {
-    try {
-      final success = await VoiceNoteService.instance.startRecording();
-      if (success) {
-        setState(() {
-          _isRecordingVoice = true;
-          _hasVoiceNote = false;
-        });
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Microphone permission denied or recording failed'),
-            backgroundColor: AppColors.ludoRed,
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error starting recording: $e');
-    }
-  }
-
-  Future<void> _stopRecording() async {
-    try {
-      final path = await VoiceNoteService.instance.stopRecording();
-      setState(() {
-        _isRecordingVoice = false;
-        _hasVoiceNote = path != null;
-      });
-    } catch (e) {
-      debugPrint('Error stopping recording: $e');
-      setState(() {
-        _isRecordingVoice = false;
-      });
-    }
-  }
-
-  Future<void> _playVoiceNote() async {
-    final path = VoiceNoteService.instance.lastRecordPath;
-    if (path == null) return;
-    try {
-      if (_isPlayingVoice) {
-        await _voiceNotePlayer.stop();
-        setState(() {
-          _isPlayingVoice = false;
-        });
-      } else {
-        await _voiceNotePlayer.play(ap.DeviceFileSource(path));
-        setState(() {
-          _isPlayingVoice = true;
-        });
-      }
-    } catch (e) {
-      debugPrint('Error playing voice note: $e');
-      setState(() {
-        _isPlayingVoice = false;
-      });
-    }
   }
 
   void _connectSocket() {
@@ -795,34 +720,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               ),
             ),
           ),
-          
           // Matchmaking Modal Overlay
           if (_isMatching)
             _buildMatchmakingOverlay().animate().fade(duration: 300.ms),
-
-          // Voice Note Overlay / Panel
-          if (_showVoiceOverlay)
-            _buildVoiceOverlayPanel(),
         ],
-      ),
-      floatingActionButton: _isMatching ? null : Semantics(
-        label: 'Voice Note Recorder',
-        hint: 'Double tap to open the client-side local voice note recorder panel',
-        button: true,
-        child: FloatingActionButton(
-          onPressed: () {
-            AudioService.instance.playButtonClick();
-            TtsService.instance.speak("Voice Recorder");
-            setState(() {
-              _showVoiceOverlay = !_showVoiceOverlay;
-            });
-          },
-          backgroundColor: AppColors.secondary,
-          child: Icon(
-            _showVoiceOverlay ? Icons.close : Icons.mic_rounded,
-            color: Colors.white,
-          ),
-        ),
       ),
     );
   }
@@ -1309,141 +1210,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     });
   }
 
-  Widget _buildVoiceOverlayPanel() {
-    return Container(
-      color: Colors.black.withOpacity(0.75),
-      child: Center(
-        child: Container(
-          margin: const EdgeInsets.symmetric(horizontal: 24),
-          padding: const EdgeInsets.all(24),
-          decoration: BoxDecoration(
-            color: AppColors.surface,
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(color: AppColors.accentNeon.withOpacity(0.5), width: 2),
-            boxShadow: [
-              BoxShadow(
-                color: AppColors.accentNeon.withOpacity(0.25),
-                blurRadius: 20,
-                spreadRadius: 2,
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'VOICE MEMO RECORDER',
-                    style: GoogleFonts.outfit(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: Colors.white,
-                      letterSpacing: 1.2,
-                    ),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: Colors.white),
-                    onPressed: () {
-                      AudioService.instance.playButtonClick();
-                      TtsService.instance.speak("Close");
-                      setState(() {
-                        _showVoiceOverlay = false;
-                      });
-                    },
-                  ),
-                ],
-              ),
-              const Divider(color: Colors.white24, height: 24),
-              const SizedBox(height: 12),
-              if (_isRecordingVoice) ...[
-                const Icon(
-                  Icons.fiber_manual_record,
-                  color: AppColors.ludoRed,
-                  size: 54,
-                )
-                    .animate(onPlay: (c) => c.repeat(reverse: true))
-                    .scale(begin: const Offset(1, 1), end: const Offset(1.3, 1.3), duration: 600.ms),
-                const SizedBox(height: 16),
-                const Text(
-                  'Recording Audio...',
-                  style: TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(height: 24),
-                Semantics(
-                  label: 'Stop Recording Button',
-                  hint: 'Double tap to stop recording and save the voice note locally',
-                  button: true,
-                  child: ElevatedButton.icon(
-                    onPressed: () {
-                      AudioService.instance.playButtonClick();
-                      TtsService.instance.speak("Stop recording");
-                      _stopRecording();
-                    },
-                    icon: const Icon(Icons.stop),
-                    label: const Text('STOP RECORDING'),
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.ludoRed),
-                  ),
-                ),
-              ] else ...[
-                const Icon(
-                  Icons.mic,
-                  color: AppColors.accentNeon,
-                  size: 54,
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  _hasVoiceNote ? 'Voice note recorded successfully!' : 'No voice note recorded yet.',
-                  style: const TextStyle(color: Colors.white70, fontSize: 14),
-                ),
-                const SizedBox(height: 24),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    Semantics(
-                      label: 'Start Recording Button',
-                      hint: 'Double tap to start recording a new voice note',
-                      button: true,
-                      child: ElevatedButton.icon(
-                        onPressed: () {
-                          AudioService.instance.playButtonClick();
-                          TtsService.instance.speak("Record voice memo");
-                          _startRecording();
-                        },
-                        icon: const Icon(Icons.mic),
-                        label: const Text('RECORD'),
-                        style: ElevatedButton.styleFrom(backgroundColor: AppColors.primary),
-                      ),
-                    ),
-                    if (_hasVoiceNote)
-                      Semantics(
-                        label: _isPlayingVoice ? 'Stop Playback Button' : 'Play Voice Note Button',
-                        hint: _isPlayingVoice
-                            ? 'Double tap to stop playing the voice note'
-                            : 'Double tap to play back the recorded voice note',
-                        button: true,
-                        child: ElevatedButton.icon(
-                          onPressed: () {
-                            AudioService.instance.playButtonClick();
-                            TtsService.instance.speak(_isPlayingVoice ? "Stop playback" : "Play voice note");
-                            _playVoiceNote();
-                          },
-                          icon: Icon(_isPlayingVoice ? Icons.stop : Icons.play_arrow),
-                          label: Text(_isPlayingVoice ? 'STOP' : 'PLAY'),
-                          style: ElevatedButton.styleFrom(backgroundColor: AppColors.tokenGreen),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-              const SizedBox(height: 12),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
 
   Widget _buildMatchmakingOverlay() {
     return Container(

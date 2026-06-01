@@ -12,7 +12,6 @@ import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/ludo_coordinates.dart';
-import '../../../../core/services/voice_command_service.dart';
 import '../../../../core/services/tts_service.dart';
 
 class GameRoomScreen extends ConsumerStatefulWidget {
@@ -87,15 +86,10 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
 
     // Pause background lobby music during active match
     AudioService.instance.pauseBgm();
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _startVoiceCommands();
-    });
   }
 
   @override
   void dispose() {
-    VoiceCommandService.instance.stopListening();
     // Resume background lobby music when leaving match
     AudioService.instance.resumeBgm();
     _lkRoom?.disconnect();
@@ -103,21 +97,6 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     _diceController.dispose();
     _chatController.dispose();
     super.dispose();
-  }
-
-  void _startVoiceCommands() {
-    VoiceCommandService.instance.startListening({
-      'roll': () {
-        if (mounted) {
-          _onDiceBoxTapped();
-        }
-      },
-      'dice': () {
-        if (mounted) {
-          _onDiceBoxTapped();
-        }
-      },
-    });
   }
 
   void _parseGameState(Map<String, dynamic> state) {
