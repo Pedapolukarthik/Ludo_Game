@@ -6,6 +6,7 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/audio_service.dart';
 import '../../../../core/services/tts_service.dart';
+import '../../../../core/widgets/bottom_dock.dart';
 
 class LeaderboardScreen extends ConsumerStatefulWidget {
   const LeaderboardScreen({super.key});
@@ -63,14 +64,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         title: const Text('LEADERBOARD', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded),
-          onPressed: () {
-            AudioService.instance.playButtonClick();
-            TtsService.instance.speak("Back to home");
-            context.go('/home');
-          },
-        ),
+        automaticallyImplyLeading: false, // Removed back button since bottom dock is present
       ),
       body: Column(
         children: [
@@ -126,19 +120,37 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                           ],
                         ),
                         title: Text(player['name'], style: const TextStyle(fontWeight: FontWeight.bold)),
-                        subtitle: Text('Level ${player['level']} - ${player['rank']}'),
-                        trailing: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(
-                              _sortBy == 'wins' ? '${player['totalWins']} Wins' : '${player['xp']} XP',
-                              style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.secondary),
-                            ),
-                          ],
+                        subtitle: Text(
+                          'LVL ${player['level']} • ${player['rank']}',
+                          style: const TextStyle(fontSize: 11, color: AppColors.textMuted),
+                        ),
+                        trailing: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.secondary.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: AppColors.secondary.withOpacity(0.3), width: 0.8),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                _sortBy == 'wins' ? Icons.emoji_events_rounded : Icons.stars_rounded,
+                                color: _sortBy == 'wins' ? AppColors.gold : AppColors.accentNeon,
+                                size: 14,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                _sortBy == 'wins' ? '${player['totalWins']}' : '${player['xp']}',
+                                style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
                     );
                   }),
+                  const SizedBox(height: 40), // Spacer for bottom navigation dock
                 ],
               ),
             ),
@@ -146,34 +158,46 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
             // Current User Standing Bottom Bar
             if (_myRank != null)
               Container(
-                padding: const EdgeInsets.all(16),
-                decoration: const BoxDecoration(
-                  color: AppColors.surface,
-                  borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+                margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  gradient: AppTheme.cyberGradient,
+                  borderRadius: BorderRadius.circular(16),
                   boxShadow: [
-                    BoxShadow(color: Colors.black26, blurRadius: 10, offset: Offset(0, -2)),
+                    BoxShadow(
+                      color: AppColors.primary.withOpacity(0.2),
+                      blurRadius: 10,
+                      offset: const Offset(0, 4),
+                    ),
                   ],
                 ),
-                child: SafeArea(
-                  top: false,
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'YOUR CURRENT POSITION:',
-                        style: TextStyle(fontWeight: FontWeight.bold, color: AppColors.textSecondary, fontSize: 13),
+                child: Row(
+                  children: [
+                    const Icon(Icons.stars_rounded, color: Colors.white, size: 20),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'YOUR STANDING',
+                      style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white, fontSize: 12, letterSpacing: 0.8),
+                    ),
+                    const Spacer(),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.black26,
+                        borderRadius: BorderRadius.circular(10),
                       ),
-                      Text(
+                      child: Text(
                         'RANK #$_myRank',
-                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ludoYellow, fontSize: 18),
+                        style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentNeon, fontSize: 12),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
           ],
         ],
       ),
+      bottomNavigationBar: const BottomDock(activeTab: 'leaderboard'),
     );
   }
 
@@ -263,6 +287,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         // Avatar
         Stack(
           alignment: Alignment.topCenter,
+          clipBehavior: Clip.none,
           children: [
             CircleAvatar(
               radius: rank == 1 ? 36 : 28,
@@ -300,13 +325,21 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                 '#$rank',
                 style: TextStyle(fontSize: rank == 1 ? 32 : 24, fontWeight: FontWeight.bold, color: color),
               ),
-              Text(
-                _sortBy == 'wins' ? '${player['totalWins']}' : '${player['xp']}',
-                style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.textSecondary),
-              ),
-              Text(
-                _sortBy == 'wins' ? 'Wins' : 'XP',
-                style: const TextStyle(fontSize: 10, color: AppColors.textMuted),
+              const SizedBox(height: 4),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(
+                    _sortBy == 'wins' ? Icons.emoji_events_rounded : Icons.stars_rounded,
+                    color: color,
+                    size: 12,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    _sortBy == 'wins' ? '${player['totalWins']}' : '${player['xp']}',
+                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ],
               ),
             ],
           ),

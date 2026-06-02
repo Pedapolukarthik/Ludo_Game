@@ -10,6 +10,7 @@ import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../../core/services/audio_service.dart';
 import '../../../../core/services/tts_service.dart';
+import '../../../../core/widgets/bottom_dock.dart';
 
 class HomeScreen extends ConsumerStatefulWidget {
   const HomeScreen({super.key});
@@ -365,21 +366,38 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                     ],
                                   ),
                                   const SizedBox(height: 2),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: AppColors.primary.withOpacity(0.2),
-                                      borderRadius: BorderRadius.circular(6),
-                                      border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 0.8),
-                                    ),
-                                    child: Text(
-                                      'LEVEL ${user.level}',
-                                      style: const TextStyle(
-                                        color: AppColors.accentNeon,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppColors.primary.withOpacity(0.2),
+                                          borderRadius: BorderRadius.circular(6),
+                                          border: Border.all(color: AppColors.primary.withOpacity(0.4), width: 0.8),
+                                        ),
+                                        child: Text(
+                                          'LVL ${user.level}',
+                                          style: const TextStyle(
+                                            color: AppColors.accentNeon,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
                                       ),
-                                    ),
+                                      const SizedBox(width: 8),
+                                      SizedBox(
+                                        width: 70,
+                                        height: 4,
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(2),
+                                          child: LinearProgressIndicator(
+                                            value: xpProgress,
+                                            backgroundColor: Colors.white12,
+                                            valueColor: const AlwaysStoppedAnimation(AppColors.accentNeon),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
                                   ),
                                 ],
                               ),
@@ -461,87 +479,18 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   
                   const SizedBox(height: 16),
                   
-                  // XP Progress Bar
-                  Semantics(
-                    label: 'Rank Progress Bar',
-                    value: '${xpInLevel.toInt()} out of 1000 experience points',
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              'RANK PROGRESS',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.textSecondary,
-                                letterSpacing: 1.0,
-                              ),
-                            ),
-                            Text(
-                              '${xpInLevel.toInt()}/1000 XP',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: AppColors.secondary,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            height: 8,
-                            color: AppColors.surface,
-                            child: Stack(
-                              children: [
-                                Positioned.fill(
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: FractionallySizedBox(
-                                      widthFactor: xpProgress,
-                                      child: Container(
-                                        decoration: const BoxDecoration(
-                                          gradient: AppTheme.purplePinkGradient,
-                                          boxShadow: [
-                                            BoxShadow(
-                                              color: AppColors.secondary,
-                                              blurRadius: 4,
-                                              spreadRadius: 1,
-                                            )
-                                          ]
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  )
-                  .animate()
-                  .fade(duration: 400.ms, delay: 100.ms),
-
-                  const SizedBox(height: 24),
-                  
                   // Promoted Banner Card
                   Container(
-                    height: 140,
-                    padding: const EdgeInsets.all(20),
+                    height: 90,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                     decoration: BoxDecoration(
                       gradient: AppTheme.cyberGradient,
-                      borderRadius: BorderRadius.circular(24),
+                      borderRadius: BorderRadius.circular(20),
                       boxShadow: [
                         BoxShadow(
-                          color: AppColors.primary.withOpacity(0.3),
-                          blurRadius: 20,
-                          offset: const Offset(0, 8),
+                          color: AppColors.primary.withOpacity(0.2),
+                          blurRadius: 15,
+                          offset: const Offset(0, 6),
                         ),
                       ],
                       border: Border.all(color: AppColors.accentNeon.withOpacity(0.3), width: 1.5),
@@ -549,40 +498,53 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Text(
-                                'LUDO ARENA',
-                                style: TextStyle(
-                                  fontSize: 26,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 2.0,
-                                  color: Colors.white,
-                                  fontFamily: 'Outfit',
-                                  shadows: [
-                                    Shadow(color: Colors.black45, blurRadius: 6),
-                                  ],
-                                ),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            const Text(
+                              'LUDO ARENA',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2.0,
+                                color: Colors.white,
+                                fontFamily: 'Outfit',
+                                shadows: [
+                                  Shadow(color: Colors.black45, blurRadius: 6),
+                                ],
                               ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Climb the rankings, challenge friends, and dominate the arena!',
-                                style: GoogleFonts.outfit(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.9),
-                                  height: 1.3,
-                                ),
+                            ),
+                            const SizedBox(height: 4),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.black38,
+                                borderRadius: BorderRadius.circular(6),
+                                border: Border.all(color: AppColors.accentNeon.withOpacity(0.5), width: 0.8),
                               ),
-                            ],
-                          ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(Icons.workspace_premium_rounded, color: AppColors.gold, size: 12),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'LEAGUE SEASON 1',
+                                    style: GoogleFonts.outfit(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                      color: AppColors.accentNeon,
+                                      letterSpacing: 0.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                         ),
-                        const SizedBox(width: 8),
                         Icon(
                           Icons.casino_rounded,
-                          size: 76,
+                          size: 54,
                           color: Colors.white.withOpacity(0.25),
                         ).animate(onPlay: (c) => c.repeat(reverse: true))
                          .rotate(duration: 3.seconds)
@@ -691,31 +653,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
                   // Bot Selector Card
                   _buildBotSelector().animate().fade(delay: 450.ms).slideY(begin: 0.05, end: 0),
-
-                  const SizedBox(height: 20),
-
-                  // Navigation actions
-                  Row(
-                    children: [
-                      Expanded(
-                        child: _buildActionNav(
-                          title: 'LEADERBOARD',
-                          icon: Icons.emoji_events_rounded,
-                          color: AppColors.gold,
-                          onTap: () => context.go('/leaderboard'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: _buildActionNav(
-                          title: 'REWARDS WHEEL',
-                          icon: Icons.stars_rounded,
-                          color: AppColors.secondary,
-                          onTap: () => context.go('/rewards'),
-                        ),
-                      ),
-                    ],
-                  ).animate().fade(delay: 500.ms),
+                  
+                  const SizedBox(height: 12),
                 ],
               ),
             ),
@@ -725,6 +664,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             _buildMatchmakingOverlay().animate().fade(duration: 300.ms),
         ],
       ),
+      bottomNavigationBar: const BottomDock(activeTab: 'home'),
     );
   }
 
@@ -745,9 +685,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           borderRadius: BorderRadius.circular(20),
           boxShadow: [
             BoxShadow(
-              color: color.withOpacity(0.2),
-              blurRadius: 10,
-              offset: const Offset(0, 4),
+              color: color.withOpacity(0.15),
+              blurRadius: 8,
+              offset: const Offset(0, 3),
             ),
           ],
         ),
@@ -755,7 +695,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           margin: EdgeInsets.zero,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(20),
-            side: BorderSide(color: color.withOpacity(0.3), width: 1.5),
+            side: BorderSide(color: color.withOpacity(0.3), width: 1.2),
           ),
           child: InkWell(
             onTap: () {
@@ -765,82 +705,75 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             },
             borderRadius: BorderRadius.circular(20),
             child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
-              gradient: LinearGradient(
-                colors: [AppColors.cardBg, AppColors.surface.withOpacity(0.8)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
+              padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                gradient: LinearGradient(
+                  colors: [AppColors.cardBg, AppColors.surface.withOpacity(0.8)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
-            ),
-            child: Column(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: gradient,
-                    boxShadow: [
-                      BoxShadow(
-                        color: color.withOpacity(0.4),
-                        blurRadius: 12,
-                        spreadRadius: 1,
-                      )
-                    ]
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: gradient,
+                      boxShadow: [
+                        BoxShadow(
+                          color: color.withOpacity(0.3),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        )
+                      ]
+                    ),
+                    child: Icon(icon, size: 24, color: Colors.white),
                   ),
-                  child: Icon(icon, size: 28, color: Colors.white),
-                ),
-                const SizedBox(height: 14),
-                Text(
-                  title,
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  subtitle,
-                  style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                ),
-              ],
+                  const SizedBox(height: 12),
+                  Text(
+                    title,
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: Colors.white),
+                  ),
+                  const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: color.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: color.withOpacity(0.3), width: 0.8),
+                    ),
+                    child: Text(
+                      subtitle.toUpperCase(),
+                      style: TextStyle(
+                        color: color,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.5,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 
-  Widget _buildActionNav({
-    required String title,
-    required IconData icon,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return Semantics(
-      label: 'Navigation: $title',
-      hint: 'Double tap to open the $title screen',
-      button: true,
-      child: Card(
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: BorderSide(color: color.withOpacity(0.2), width: 1.2),
-        ),
-        child: InkWell(
-          onTap: () {
-            AudioService.instance.playButtonClick();
-            TtsService.instance.speak(title);
-            onTap();
-          },
-          borderRadius: BorderRadius.circular(16),
-          child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 18, horizontal: 16),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(icon, color: color, size: 20),
-              const SizedBox(width: 8),
-              Text(
-                title,
+  Widget _buildBotSelector() {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.rocket_launch_rounded, color: AppColors.ludoGreen, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'AI BATTLE',
                 style: GoogleFonts.outfit(
                   fontWeight: FontWeight.bold,
                   fontSize: 13,
@@ -848,51 +781,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   letterSpacing: 1.0,
                 ),
               ),
-            ],
-          ),
-        ),
-      ),
-    ),
-  );
-}
-
-  Widget _buildBotSelector() {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Row(
-              children: [
-                const Icon(Icons.rocket_launch_rounded, color: AppColors.ludoGreen, size: 22),
-                const SizedBox(width: 8),
-                Text(
-                  'PRACTICE MODE (VS AI BOT)',
-                  style: GoogleFonts.outfit(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    color: Colors.white,
-                    letterSpacing: 1.2,
-                  ),
-                ),
-              ],
             ),
-            const SizedBox(height: 16),
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Expanded(
-                  child: _buildDifficultyBtn('EASY', AppColors.ludoGreen, () => _startAiMatch('easy')),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildDifficultyBtn('MEDIUM', AppColors.ludoYellow, () => _startAiMatch('medium')),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildDifficultyBtn('HARD', AppColors.tokenRed, () => _startAiMatch('hard')),
-                ),
+                _buildDifficultyBtn('EASY', AppColors.ludoGreen, () => _startAiMatch('easy')),
+                const SizedBox(width: 6),
+                _buildDifficultyBtn('MED', AppColors.ludoYellow, () => _startAiMatch('medium')),
+                const SizedBox(width: 6),
+                _buildDifficultyBtn('HARD', AppColors.tokenRed, () => _startAiMatch('hard')),
               ],
             ),
           ],
@@ -906,25 +803,28 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       label: 'Practice Mode Difficulty: $label',
       hint: 'Double tap to start an offline match against a $label AI bot',
       button: true,
-      child: OutlinedButton(
-        onPressed: () {
+      child: InkWell(
+        onTap: () {
           AudioService.instance.playButtonClick();
           TtsService.instance.speak("$label difficulty");
           onTap();
         },
-        style: OutlinedButton.styleFrom(
-          side: BorderSide(color: color.withOpacity(0.5), width: 1.5),
-          foregroundColor: color,
-          backgroundColor: color.withOpacity(0.04),
-          padding: const EdgeInsets.symmetric(vertical: 14),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        ),
-        child: Text(
-          label,
-          style: GoogleFonts.outfit(
-            fontWeight: FontWeight.bold,
-            fontSize: 12,
-            letterSpacing: 0.8,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.4), width: 1.2),
+          ),
+          child: Text(
+            label,
+            style: GoogleFonts.outfit(
+              fontWeight: FontWeight.bold,
+              fontSize: 10,
+              color: color,
+              letterSpacing: 0.5,
+            ),
           ),
         ),
       ),
@@ -937,17 +837,17 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         borderRadius: BorderRadius.circular(20),
         boxShadow: [
           BoxShadow(
-            color: Colors.purple.withOpacity(0.2),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
+            color: Colors.purple.withOpacity(0.1),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
           ),
         ],
       ),
       child: Card(
         margin: EdgeInsets.zero,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(20),
-          side: BorderSide(color: Colors.purple.withOpacity(0.3), width: 1.5),
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: Colors.purple.withOpacity(0.3), width: 1.2),
         ),
         child: InkWell(
           onTap: () {
@@ -955,11 +855,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             TtsService.instance.speak("Local Multiplayer Mode");
             _showLocalMultiplayerDialog();
           },
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: BorderRadius.circular(16),
           child: Container(
-            padding: const EdgeInsets.all(20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(16),
               gradient: LinearGradient(
                 colors: [AppColors.cardBg, AppColors.surface.withOpacity(0.85)],
                 begin: Alignment.topCenter,
@@ -969,7 +869,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             child: Row(
               children: [
                 Container(
-                  padding: const EdgeInsets.all(12),
+                  padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: const LinearGradient(
@@ -977,34 +877,40 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.purple.withOpacity(0.4),
-                        blurRadius: 12,
-                        spreadRadius: 1,
-                      )
-                    ]
                   ),
-                  child: const Icon(Icons.phone_android_rounded, size: 28, color: Colors.white),
+                  child: const Icon(Icons.phone_android_rounded, size: 20, color: Colors.white),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'Local Multiplayer',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                        'LOCAL MULTIPLAYER',
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.white, letterSpacing: 0.8),
                       ),
                       const SizedBox(height: 4),
-                      Text(
-                        'Pass & Play with friends on this device offline',
-                        style: GoogleFonts.outfit(color: AppColors.textSecondary, fontSize: 12),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.purple.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: Colors.purple.withOpacity(0.3), width: 0.8),
+                        ),
+                        child: Text(
+                          'PASS & PLAY',
+                          style: GoogleFonts.outfit(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.purple[200],
+                            letterSpacing: 0.5,
+                          ),
+                        ),
                       ),
                     ],
                   ),
                 ),
-                const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppColors.textSecondary),
+                const Icon(Icons.arrow_forward_ios_rounded, size: 14, color: AppColors.textSecondary),
               ],
             ),
           ),

@@ -6,6 +6,8 @@ import '../../../../core/network/api_client.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../core/services/tts_service.dart';
 import '../providers/auth_provider.dart';
+import '../../../../core/widgets/bottom_dock.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
   const ProfileScreen({super.key});
@@ -145,18 +147,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
         title: const Text('PLAYER PROFILE', style: TextStyle(fontFamily: 'Outfit', fontWeight: FontWeight.bold)),
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: Semantics(
-          label: 'Back Button',
-          hint: 'Double tap to return to the home screen dashboard',
-          button: true,
-          child: IconButton(
-            icon: const Icon(Icons.arrow_back_ios_new_rounded),
-            onPressed: () {
-              TtsService.instance.speak("Back to home");
-              context.go('/home');
-            },
-          ),
-        ),
+        automaticallyImplyLeading: false, // Removed back button since bottom dock is present
       ),
       body: Column(
         children: [
@@ -261,28 +252,41 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                     ),
                     const SizedBox(height: 20),
 
-                    // Win-Loss statistics row
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
+                    // Win-Loss statistics 2x2 grid
+                    GridView.count(
+                      crossAxisCount: 2,
+                      shrinkWrap: true,
+                      physics: const NeverScrollableScrollPhysics(),
+                      crossAxisSpacing: 10,
+                      mainAxisSpacing: 10,
+                      childAspectRatio: 1.7,
                       children: [
-                        _buildStat('Wins', '${user.totalWins}', AppColors.ludoGreen),
-                        _buildStat('Losses', '${user.losses}', AppColors.ludoRed),
-                        _buildStat('Matches', '${user.totalGames}', AppColors.ludoBlue),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceAround,
-                      children: [
-                        _buildStat(
-                          'Win %',
+                        _buildGridStatCard(
+                          'WINS',
+                          '${user.totalWins}',
+                          Icons.emoji_events_rounded,
+                          AppColors.ludoGreen,
+                        ),
+                        _buildGridStatCard(
+                          'WIN RATE',
                           user.totalGames > 0
-                              ? '${(user.totalWins / user.totalGames * 100).toStringAsFixed(1)}%'
-                              : '0.0%',
+                              ? '${(user.totalWins / user.totalGames * 100).toStringAsFixed(0)}%'
+                              : '0%',
+                          Icons.analytics_rounded,
                           AppColors.gold,
                         ),
-                        _buildStat('Win Streak', '${user.currentWinStreak}', AppColors.secondary),
-                        _buildStat('Max Streak', '${user.highestWinStreak}', AppColors.gold),
+                        _buildGridStatCard(
+                          'STREAK',
+                          '${user.currentWinStreak} (MAX ${user.highestWinStreak})',
+                          Icons.local_fire_department_rounded,
+                          AppColors.secondary,
+                        ),
+                        _buildGridStatCard(
+                          'MATCHES',
+                          '${user.totalGames}',
+                          Icons.sports_esports_rounded,
+                          AppColors.accentNeon,
+                        ),
                       ],
                     ),
                     const SizedBox(height: 16),
@@ -332,34 +336,95 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
               controller: _tabController,
               children: [
                 // Achievements Tab
-                ListView.builder(
-                  padding: const EdgeInsets.all(16),
-                  itemCount: user.achievements.length + 1,
-                  itemBuilder: (context, idx) {
-                    if (idx == 0) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 12),
+                () {
+                  final cleanAchievements = user.achievements
+                      .where((a) => !a.startsWith('DailyClaim_') && !a.startsWith('SpinClaim_'))
+                      .toList();
+
+                  return Column(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
                         child: Text(
-                          'Referral Code: ${user.referralCode}',
-                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ludoYellow, fontSize: 16),
+                          'REFERRAL CODE: ${user.referralCode}',
+                          style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.ludoYellow, fontSize: 14, letterSpacing: 0.8, fontFamily: 'Outfit'),
                           textAlign: TextAlign.center,
                         ),
-                      );
-                    }
-                    final achievement = user.achievements[idx - 1];
-                    if (achievement.startsWith('DailyClaim_') || achievement.startsWith('SpinClaim_')) {
-                      return const SizedBox.shrink(); // Hide reward keys
-                    }
-                    return Card(
-                      color: AppColors.surface,
-                      child: ListTile(
-                        leading: const Icon(Icons.wine_bar, color: AppColors.gold),
-                        title: Text(achievement),
-                        subtitle: const Text('Unlocked milestone'),
                       ),
-                    );
-                  },
-                ),
+                      Expanded(
+                        child: cleanAchievements.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(Icons.workspace_premium_rounded, size: 48, color: AppColors.textMuted.withOpacity(0.5)),
+                                    const SizedBox(height: 12),
+                                    const Text(
+                                      'No achievements unlocked yet.',
+                                      style: TextStyle(color: AppColors.textSecondary),
+                                    ),
+                                  ],
+                                ),
+                              )
+                            : GridView.builder(
+                                padding: const EdgeInsets.all(16),
+                                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                                  crossAxisCount: 3,
+                                  crossAxisSpacing: 12,
+                                  mainAxisSpacing: 12,
+                                  childAspectRatio: 0.85,
+                                ),
+                                itemCount: cleanAchievements.length,
+                                itemBuilder: (context, index) {
+                                  final achievement = cleanAchievements[index];
+                                  return Container(
+                                    decoration: BoxDecoration(
+                                      color: AppColors.cardBg,
+                                      borderRadius: BorderRadius.circular(16),
+                                      border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+                                    ),
+                                    padding: const EdgeInsets.all(8),
+                                    child: Column(
+                                      mainAxisAlignment: MainAxisAlignment.center,
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(8),
+                                          decoration: BoxDecoration(
+                                            shape: BoxShape.circle,
+                                            gradient: AppTheme.purplePinkGradient,
+                                            boxShadow: [
+                                              BoxShadow(
+                                                color: AppColors.secondary.withOpacity(0.2),
+                                                blurRadius: 8,
+                                              ),
+                                            ],
+                                          ),
+                                          child: const Icon(Icons.workspace_premium_rounded, color: Colors.white, size: 24),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Expanded(
+                                          child: Text(
+                                            achievement,
+                                            style: const TextStyle(
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.bold,
+                                              color: Colors.white,
+                                            ),
+                                            textAlign: TextAlign.center,
+                                            maxLines: 2,
+                                            overflow: TextOverflow.ellipsis,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                      const SizedBox(height: 80), // spacer for bottom navigation dock
+                    ],
+                  );
+                }(),
 
                 // Friends tab
                 Column(
@@ -388,8 +453,11 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                       ),
                       Expanded(
                         child: ListView.builder(
-                          itemCount: _searchResults.length,
+                          itemCount: _searchResults.length + 1,
                           itemBuilder: (context, idx) {
+                            if (idx == _searchResults.length) {
+                              return const SizedBox(height: 80);
+                            }
                             final item = _searchResults[idx];
                             return ListTile(
                               leading: CircleAvatar(backgroundImage: NetworkImage(item['avatar'])),
@@ -411,13 +479,19 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                             : _friends.isEmpty
                                 ? const Center(child: Text('No friends added yet.'))
                                 : ListView.builder(
-                                    itemCount: _friends.length,
+                                    itemCount: _friends.length + 1,
                                     itemBuilder: (context, idx) {
+                                      if (idx == _friends.length) {
+                                        return const SizedBox(height: 80);
+                                      }
                                       final friend = _friends[idx];
                                       return ListTile(
                                         leading: CircleAvatar(backgroundImage: NetworkImage(friend['avatar'])),
                                         title: Text(friend['name']),
-                                        subtitle: Text('Rank: ${friend['rank']}'),
+                                        subtitle: Text(
+                                          'RANK: ${friend['rank'].toUpperCase()}',
+                                          style: const TextStyle(fontSize: 10, color: AppColors.textSecondary, letterSpacing: 0.5),
+                                        ),
                                         trailing: IconButton(
                                           icon: const Icon(Icons.person_remove_outlined, color: AppColors.ludoRed),
                                           onPressed: () => _removeFriend(friend['_id']),
@@ -430,6 +504,47 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> with SingleTicker
                   ],
                 ),
               ],
+            ),
+          ),
+        ],
+      ),
+      bottomNavigationBar: const BottomDock(activeTab: 'profile'),
+    );
+  }
+
+  Widget _buildGridStatCard(String label, String value, IconData icon, Color color) {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.cardBg,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: color.withOpacity(0.2), width: 1.2),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.outfit(
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textSecondary,
+                  letterSpacing: 0.8,
+                ),
+              ),
+              Icon(icon, color: color, size: 16),
+            ],
+          ),
+          Text(
+            value,
+            style: GoogleFonts.outfit(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Colors.white,
             ),
           ),
         ],

@@ -2,7 +2,6 @@ import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:lottie/lottie.dart';
 import '../../../../core/network/api_client.dart';
@@ -12,6 +11,7 @@ import '../../../../core/services/tts_service.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../widgets/missions_widget.dart';
 import '../providers/missions_provider.dart';
+import '../../../../core/widgets/bottom_dock.dart';
 
 class RewardsScreen extends ConsumerStatefulWidget {
   const RewardsScreen({super.key});
@@ -291,111 +291,97 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
   }
 
   Widget _buildStreakTimeline(int streak) {
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      physics: const BouncingScrollPhysics(),
-      child: Row(
-        children: List.generate(7, (index) {
-          final dayNum = index + 1;
-          final isClaimed = dayNum < streak || (dayNum == streak && _dailyClaimed);
-          final isClaimable = dayNum == streak && !_dailyClaimed;
-          final isLocked = dayNum > streak;
-          
-          final cardColor = isClaimable 
-            ? AppColors.primary.withOpacity(0.15) 
-            : isClaimed 
-              ? AppColors.ludoGreen.withOpacity(0.08) 
-              : Colors.white.withOpacity(0.03);
-              
-          final borderColor = isClaimable
-            ? AppColors.primary
-            : isClaimed
-              ? AppColors.ludoGreen.withOpacity(0.4)
-              : Colors.white.withOpacity(0.08);
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: SingleChildScrollView(
+        scrollDirection: Axis.horizontal,
+        physics: const BouncingScrollPhysics(),
+        child: Row(
+          children: List.generate(7, (index) {
+            final dayNum = index + 1;
+            final isClaimed = dayNum < streak || (dayNum == streak && _dailyClaimed);
+            final isClaimable = dayNum == streak && !_dailyClaimed;
+            final isLocked = dayNum > streak;
 
-          final Widget dayCard = Container(
-            width: 72,
-            margin: const EdgeInsets.symmetric(horizontal: 5, vertical: 8),
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: cardColor,
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: borderColor, width: 1.5),
-              boxShadow: isClaimable ? [
-                BoxShadow(
-                  color: AppColors.primary.withOpacity(0.2),
-                  blurRadius: 8,
-                  spreadRadius: 1,
-                )
-              ] : [],
-            ),
-            child: Column(
+            return Row(
               children: [
-                Text(
-                  'DAY $dayNum',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: isClaimable 
-                      ? AppColors.accentNeon 
-                      : isLocked 
-                        ? AppColors.textMuted 
-                        : AppColors.textPrimary,
-                    fontFamily: 'Outfit',
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Icon(
-                  dayNum == 7 ? Icons.card_giftcard_rounded : Icons.monetization_on_rounded,
-                  size: 22,
-                  color: isClaimed 
-                    ? AppColors.ludoGreen 
-                    : isClaimable 
-                      ? AppColors.gold 
-                      : AppColors.textMuted,
-                ),
-                const SizedBox(height: 6),
-                Text(
-                  dayNum == 7 ? '500+XP' : '${dayNum * 50}',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: isLocked ? AppColors.textMuted : Colors.white,
-                  ),
-                ),
-                const SizedBox(height: 6),
-                if (isClaimed)
-                  const Icon(Icons.check_circle_rounded, color: AppColors.ludoGreen, size: 12)
-                else if (isClaimable)
+                if (index > 0)
                   Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                    width: 14,
+                    height: 3,
+                    color: isClaimed ? AppColors.ludoGreen : Colors.white10,
+                  ),
+                Semantics(
+                  label: 'Streak Day $dayNum',
+                  value: isClaimed ? 'Claimed' : (isClaimable ? 'Ready' : 'Locked'),
+                  child: Container(
+                    width: 58,
+                    height: 58,
                     decoration: BoxDecoration(
-                      color: AppColors.gold.withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: const Text(
-                      'READY',
-                      style: TextStyle(
-                        fontSize: 7,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.gold,
+                      shape: BoxShape.circle,
+                      color: isClaimable
+                          ? AppColors.primary.withOpacity(0.2)
+                          : isClaimed
+                              ? AppColors.ludoGreen.withOpacity(0.1)
+                              : Colors.white.withOpacity(0.04),
+                      border: Border.all(
+                        color: isClaimable
+                            ? AppColors.accentNeon
+                            : isClaimed
+                                ? AppColors.ludoGreen
+                                : Colors.white12,
+                        width: 2,
                       ),
+                      boxShadow: isClaimable
+                          ? [
+                              BoxShadow(
+                                color: AppColors.accentNeon.withOpacity(0.3),
+                                blurRadius: 8,
+                              )
+                            ]
+                          : [],
                     ),
-                  )
-                else
-                  const Icon(Icons.lock_rounded, color: AppColors.textMuted, size: 12),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          'D$dayNum',
+                          style: TextStyle(
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                            color: isClaimable ? AppColors.accentNeon : AppColors.textSecondary,
+                            fontFamily: 'Outfit',
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Icon(
+                          isClaimed
+                              ? Icons.check_circle_rounded
+                              : (dayNum == 7 ? Icons.card_giftcard_rounded : Icons.monetization_on_rounded),
+                          size: 14,
+                          color: isClaimed
+                              ? AppColors.ludoGreen
+                              : isClaimable
+                                  ? AppColors.gold
+                                  : AppColors.textMuted,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          dayNum == 7 ? '500XP' : '+${dayNum * 50}',
+                          style: TextStyle(
+                            fontSize: 7,
+                            fontWeight: FontWeight.bold,
+                            color: isLocked ? AppColors.textMuted : Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
-            ),
-          );
-
-          if (isClaimable) {
-            return dayCard
-                .animate(onPlay: (c) => c.repeat(reverse: true))
-                .scale(begin: const Offset(1, 1), end: const Offset(1.05, 1.05), duration: 1.seconds);
-          }
-          return dayCard;
-        }),
+            );
+          }),
+        ),
       ),
     );
   }
@@ -427,28 +413,18 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 // Header
-                Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
-                      onPressed: () {
-                        AudioService.instance.playButtonClick();
-                        TtsService.instance.speak("Back to home");
-                        context.go('/home');
-                      },
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                  child: const Text(
+                    'QUEST REWARDS',
+                    style: TextStyle(
+                      fontFamily: 'Outfit',
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                      letterSpacing: 1.5,
+                      color: Colors.white,
                     ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'QUEST REWARDS',
-                      style: TextStyle(
-                        fontFamily: 'Outfit',
-                        fontWeight: FontWeight.bold,
-                        fontSize: 22,
-                        letterSpacing: 1.5,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+                  ),
                 ),
                 const SizedBox(height: 16),
 
@@ -456,30 +432,30 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                 Container(
                   decoration: BoxDecoration(
                     color: AppColors.cardBg.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.2),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.primary.withOpacity(0.08),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.all(20),
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     children: [
                       Row(
                         children: [
                           Container(
-                            padding: const EdgeInsets.all(10),
+                            padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
                               color: AppColors.secondary.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(12),
                             ),
-                            child: const Icon(Icons.calendar_today_rounded, color: AppColors.secondary, size: 24),
+                            child: const Icon(Icons.calendar_today_rounded, color: AppColors.secondary, size: 20),
                           ),
-                          const SizedBox(width: 14),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -487,17 +463,17 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                                 const Text(
                                   'DAILY LOGIN STREAK',
                                   style: TextStyle(
-                                    fontSize: 10,
+                                    fontSize: 9,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textSecondary,
-                                    letterSpacing: 1.5,
+                                    letterSpacing: 1.0,
                                   ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
                                   '${user.loginStreak} DAYS ACTIVE',
                                   style: const TextStyle(
-                                    fontSize: 18,
+                                    fontSize: 16,
                                     fontWeight: FontWeight.bold,
                                     color: Colors.white,
                                     fontFamily: 'Outfit',
@@ -509,20 +485,14 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                         ],
                       ),
                       const SizedBox(height: 12),
-                      const Text(
-                        'Claim daily coins & XP. Higher streaks earn larger coin bonuses!',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
                       
                       _buildStreakTimeline(user.loginStreak),
                       
-                      const SizedBox(height: 20),
+                      const SizedBox(height: 12),
                       
                       SizedBox(
                         width: double.infinity,
-                        height: 52,
+                        height: 48,
                         child: ElevatedButton(
                           onPressed: _dailyClaimed ? null : () {
                             TtsService.instance.speak("Claim Coins and X P");
@@ -531,18 +501,18 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.ludoGreen,
                             disabledBackgroundColor: const Color(0xFF1E293B),
-                            shadowColor: AppColors.ludoGreen.withOpacity(_dailyClaimed ? 0 : 0.4),
+                            shadowColor: AppColors.ludoGreen.withOpacity(_dailyClaimed ? 0 : 0.3),
                             shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(14),
+                              borderRadius: BorderRadius.circular(12),
                             ),
                           ),
                           child: Text(
                             _dailyClaimed ? 'CLAIMED TODAY' : 'CLAIM COINS & XP',
                             style: const TextStyle(
-                              fontSize: 14,
+                              fontSize: 13,
                               fontWeight: FontWeight.bold,
                               color: Colors.white,
-                              letterSpacing: 1.0,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ),
@@ -551,36 +521,30 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                   ),
                 ).animate().fade(duration: 400.ms).slideY(begin: 0.05, end: 0),
                 
-                const SizedBox(height: 24),
+                const SizedBox(height: 20),
 
                 // Spin Wheel Card
                 Container(
                   decoration: BoxDecoration(
                     color: AppColors.cardBg.withOpacity(0.6),
-                    borderRadius: BorderRadius.circular(24),
-                    border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.5),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppColors.primary.withOpacity(0.2), width: 1.2),
                     boxShadow: [
                       BoxShadow(
                         color: AppColors.primary.withOpacity(0.08),
-                        blurRadius: 15,
-                        offset: const Offset(0, 8),
+                        blurRadius: 12,
+                        offset: const Offset(0, 6),
                       ),
                     ],
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
                   child: Column(
                     children: [
                       const Text(
                         'WHEEL OF FORTUNE',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18, fontFamily: 'Outfit', letterSpacing: 1.2),
+                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, fontFamily: 'Outfit', letterSpacing: 1.2),
                       ),
-                      const SizedBox(height: 4),
-                      const Text(
-                        'Spin once a day to win Jackpots, XP, or Coin boosts!',
-                        style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 20),
                       
                       // Spin Wheel
                       Stack(
@@ -834,11 +798,13 @@ class _RewardsScreenState extends ConsumerState<RewardsScreen> with TickerProvid
                     .animate()
                     .fade(duration: 400.ms, delay: 200.ms)
                     .slideY(begin: 0.05, end: 0),
+                const SizedBox(height: 80), // spacer for bottom dock
               ],
             ),
           ),
         ),
       ),
+      bottomNavigationBar: const BottomDock(activeTab: 'rewards'),
     );
   }
 }

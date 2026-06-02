@@ -92,92 +92,111 @@ class DailyMissionsWidget extends ConsumerWidget {
       margin: const EdgeInsets.only(bottom: 12),
       decoration: BoxDecoration(
         color: AppColors.cardBg.withOpacity(0.6),
-        borderRadius: BorderRadius.circular(20),
+        borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: (mission.completed ? AppColors.ludoGreen : AppColors.primary).withOpacity(0.2),
-          width: 1.5,
+          width: 1.2,
         ),
-        boxShadow: [
-          BoxShadow(
-            color: (mission.completed ? AppColors.ludoGreen : AppColors.primary).withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 4),
-          ),
-        ],
       ),
       child: Padding(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            // Title and Completion Status
             Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // Left block: Title & Description
                 Expanded(
-                  child: Text(
-                    mission.title,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 15,
-                      fontFamily: 'Outfit',
-                      color: Colors.white,
-                    ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        mission.title,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                          fontFamily: 'Outfit',
+                          color: Colors.white,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        mission.description,
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
-                if (mission.completed)
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: AppColors.ludoGreen.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: AppColors.ludoGreen.withOpacity(0.4)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.check_circle_rounded, color: AppColors.ludoGreen, size: 12),
-                        SizedBox(width: 4),
-                        Text(
-                          'COMPLETED',
+                const SizedBox(width: 8),
+                // Right block: Progress status / Completed badge & Rewards
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    if (mission.completed)
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppColors.ludoGreen.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppColors.ludoGreen.withOpacity(0.3)),
+                        ),
+                        child: const Text(
+                          'DONE',
                           style: TextStyle(
                             color: AppColors.ludoGreen,
-                            fontSize: 9,
+                            fontSize: 8,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
+                      )
+                    else
+                      Text(
+                        '${mission.progress}/${mission.goal}',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.secondary,
+                          fontSize: 12,
+                        ),
+                      ),
+                    const SizedBox(height: 6),
+                    // Compact Rewards pills
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (mission.coins > 0) ...[
+                          const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 12),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${mission.coins}',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70),
+                          ),
+                          const SizedBox(width: 8),
+                        ],
+                        if (mission.xp > 0) ...[
+                          const Icon(Icons.stars_rounded, color: AppColors.secondary, size: 12),
+                          const SizedBox(width: 2),
+                          Text(
+                            '${mission.xp}',
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white70),
+                          ),
+                        ],
                       ],
                     ),
-                  )
-                else
-                  Text(
-                    '${mission.progress} / ${mission.goal}',
-                    style: const TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.secondary,
-                      fontSize: 13,
-                    ),
-                  ),
+                  ],
+                ),
               ],
             ),
-            const SizedBox(height: 4),
-
-            // Description
-            Text(
-              mission.description,
-              style: const TextStyle(
-                color: AppColors.textSecondary,
-                fontSize: 12,
-              ),
-            ),
-            const SizedBox(height: 12),
-
-            // Progress bar (Custom Neon Gradient Fill)
+            const SizedBox(height: 10),
+            // Progress bar
             ClipRRect(
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(3),
               child: Container(
-                height: 8,
-                color: const Color(0xFF161E2E),
+                height: 5,
+                color: const Color(0xFF111726),
                 child: Stack(
                   children: [
                     Positioned.fill(
@@ -185,18 +204,11 @@ class DailyMissionsWidget extends ConsumerWidget {
                         alignment: Alignment.centerLeft,
                         child: FractionallySizedBox(
                           widthFactor: displayProgress,
-                          child: Container(
+                           child: Container(
                             decoration: BoxDecoration(
                               gradient: mission.completed
                                 ? const LinearGradient(colors: [AppColors.ludoGreen, Color(0xFF00ADB5)])
                                 : AppTheme.purplePinkGradient,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: (mission.completed ? AppColors.ludoGreen : AppColors.primary).withOpacity(0.5),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ],
                             ),
                           ),
                         ),
@@ -205,44 +217,6 @@ class DailyMissionsWidget extends ConsumerWidget {
                   ],
                 ),
               ),
-            ),
-            const SizedBox(height: 14),
-
-            // Rewards display
-            Row(
-              children: [
-                const Text(
-                  'REWARDS:',
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textMuted,
-                    letterSpacing: 0.5,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Row(
-                  children: [
-                    const Icon(Icons.monetization_on_rounded, color: AppColors.gold, size: 15),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${mission.coins} Coins',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 14),
-                Row(
-                  children: [
-                    const Icon(Icons.stars_rounded, color: AppColors.secondary, size: 15),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${mission.xp} XP',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
-                    ),
-                  ],
-                ),
-              ],
             ),
           ],
         ),
