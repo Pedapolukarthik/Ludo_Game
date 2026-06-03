@@ -28,6 +28,8 @@ app.use('/api/tournaments', tournamentRoutes);
 console.log('[Route Load] Registering /api/admin routes');
 app.use('/api/admin', adminRoutes);
 console.log('[Route Load] Registering /api/voice routes');
+console.log('Voice routes loaded');
+console.log('/api/voice routes active');
 app.use('/api/voice', voiceRoutes);
 
 // Health check endpoint
