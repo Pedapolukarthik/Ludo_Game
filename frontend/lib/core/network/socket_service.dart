@@ -20,6 +20,7 @@ class SocketService {
   void Function(Map<String, dynamic>)? onChatMessage;
   void Function(Map<String, dynamic>)? onEmojiReaction;
   void Function(Map<String, dynamic>)? onVoiceToken;
+  void Function(String)? onVoiceTokenError;
   void Function(Map<String, dynamic>)? onGameEnded;
   void Function(String)? onError;
   void Function()? onConnect;
@@ -72,6 +73,10 @@ class SocketService {
     _socket!.on('chat_message', (data) => onChatMessage?.call(Map<String, dynamic>.from(data)));
     _socket!.on('emoji_reaction', (data) => onEmojiReaction?.call(Map<String, dynamic>.from(data)));
     _socket!.on('voice_token', (data) => onVoiceToken?.call(Map<String, dynamic>.from(data)));
+    _socket!.on('voice_token_error', (data) {
+      final message = data is Map ? (data['message']?.toString() ?? 'Voice token error') : data.toString();
+      onVoiceTokenError?.call(message);
+    });
     
     _socket!.on('error', (data) => onError?.call(data.toString()));
 

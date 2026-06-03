@@ -1,18 +1,20 @@
+import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:livekit_client/livekit_client.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:lottie/lottie.dart';
 import '../../../../core/services/audio_service.dart';
 import '../../../../core/network/socket_provider.dart';
+import '../../../../core/network/api_client.dart';
 import '../../../../core/services/local_storage.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../domain/ludo_coordinates.dart';
 import '../../../../core/services/tts_service.dart';
+import '../../../../core/services/voice_chat_service.dart';
 
 class GameRoomScreen extends ConsumerStatefulWidget {
   final String roomCode;
@@ -44,10 +46,12 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   // UI state
   final List<Map<String, dynamic>> _chatMessages = [];
   final TextEditingController _chatController = TextEditingController();
-  bool _isVoiceMuted = true;
-  bool _isVoiceConnected = false;
-  String? _activeSpeaker;
-  Room? _lkRoom;
+  
+  // Temporary visibility variable for the developer debug overlay panel
+  bool _showVoiceDebugPanel = false;
+  
+  // Track push-to-talk press status locally to animate the Hold-to-Talk button
+  bool _isHoldingMic = false;
   
   // Floating emoji animation state
   final Map<String, List<String>> _floatingEmojis = {
@@ -87,13 +91,14 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     // Pause background lobby music during active match
     AudioService.instance.pauseBgm();
   }
-
-  @override
   void dispose() {
     // Resume background lobby music when leaving match
     AudioService.instance.resumeBgm();
-    _lkRoom?.disconnect();
-    _lkRoom?.dispose();
+    
+    // Clean up voice chat room session
+    Future.microtask(() {
+      ref.read(voiceChatProvider.notifier).disconnect();
+    });
     _diceController.dispose();
     _chatController.dispose();
     super.dispose();
@@ -198,53 +203,26 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       }
     };
 
-    socket.onVoiceToken = (data) async {
-      final token = data['token'] as String?;
-      final url = data['url'] as String?;
-      if (token == null || url == null) {
-        print('LiveKit token or url missing in socket event response');
-        return;
+    socket.onVoiceToken = (data) {
+      if (mounted) _handleVoiceTokenPayload(Map<String, dynamic>.from(data));
+    };
+
+    socket.onVoiceTokenError = (message) {
+      debugPrint('[LiveKit] voice_token_error: $message');
+      if (mounted) {
+        _addHistoryMessage('Voice token error: $message');
+        _showVoiceUnavailable(message);
+        _fetchVoiceTokenViaHttpIfAvailable();
       }
-      
-      try {
-        if (_lkRoom != null) {
-          await _lkRoom!.disconnect();
-          await _lkRoom!.dispose();
-        }
+    };
 
-        final room = Room();
-        _lkRoom = room;
-
-        room.addListener(() {
-          if (!mounted) return;
-          String? speaker;
-          for (var p in room.remoteParticipants.values) {
-            if (p.isSpeaking) {
-              speaker = p.name.isNotEmpty ? p.name : p.identity;
-              break;
-            }
-          }
-          if (room.localParticipant?.isSpeaking ?? false) {
-            speaker = 'You';
-          }
-          setState(() {
-            _activeSpeaker = speaker;
-          });
-        });
-
-        await room.connect(url, token);
-        await room.localParticipant?.setMicrophoneEnabled(!_isVoiceMuted);
-
+    socket.onError = (message) {
+      if (message.toLowerCase().contains('voice')) {
+        debugPrint('[LiveKit] socket error: $message');
         if (mounted) {
-          setState(() {
-            _isVoiceConnected = true;
-          });
-          _addHistoryMessage('Connected to secure audio channel');
-        }
-      } catch (e) {
-        print('Failed to connect to LiveKit: $e');
-        if (mounted) {
-          _addHistoryMessage('Failed to connect to audio channel');
+          _addHistoryMessage(message);
+          _showVoiceUnavailable(message);
+          _fetchVoiceTokenViaHttpIfAvailable();
         }
       }
     };
@@ -634,24 +612,87 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
 
   // --- Voice & Chat Toggles ---
 
-  void _toggleVoiceChat() async {
-    AudioService.instance.playButtonClick();
-    if (_isVoiceConnected && _lkRoom != null) {
-      final speakText = !_isVoiceMuted ? "Mute voice chat" : "Unmute voice chat";
-      TtsService.instance.speak(speakText);
-      setState(() {
-        _isVoiceMuted = !_isVoiceMuted;
-      });
-      try {
-        await _lkRoom!.localParticipant?.setMicrophoneEnabled(!_isVoiceMuted);
-        _addHistoryMessage('Microphone ${_isVoiceMuted ? 'Muted' : 'Unmuted'}');
-      } catch (e) {
-        print('Failed to toggle mic state: $e');
+  void _handleVoiceTokenPayload(Map<String, dynamic> data) {
+    final token = data['token'] as String?;
+    final url = data['url'] as String?;
+    final roomName = data['roomName'] as String?;
+    debugPrint(
+      '[LiveKit] token received url=$url room=$roomName valid=${VoiceChatService.isValidLiveKitToken(token)}',
+    );
+    if (!VoiceChatService.isValidLiveKitToken(token) || url == null || url.trim().isEmpty) {
+      debugPrint('[LiveKit] Invalid token/url from socket');
+      _showVoiceUnavailable('Invalid voice token from server');
+      _fetchVoiceTokenViaHttpIfAvailable();
+      return;
+    }
+    ref.read(voiceChatProvider.notifier).connect(
+      token: token!,
+      url: url,
+      roomCode: widget.roomCode.trim().toUpperCase(),
+      roomName: roomName,
+    );
+  }
+
+  Future<void> _requestVoiceToken() async {
+    await ref.read(voiceChatProvider.notifier).prepareReconnect();
+    TtsService.instance.speak('Connecting voice chat');
+    _addHistoryMessage('Requesting secure voice channel token...');
+    ref.read(socketServiceProvider).requestVoiceToken(widget.roomCode.trim().toUpperCase());
+  }
+
+  void _showVoiceUnavailable(String message) {
+    if (!mounted) return;
+    ref.read(voiceChatProvider.notifier).prepareReconnect();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Voice chat unavailable: $message'),
+        backgroundColor: AppColors.ludoRed,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  /// Only calls REST API when deployed backend exposes /api/voice/health.
+  Future<void> _fetchVoiceTokenViaHttpIfAvailable() async {
+    try {
+      final healthRes = await ApiClient.get('/voice/health');
+      if (healthRes.statusCode == 404) {
+        debugPrint('[LiveKit] /api/voice not on server — deploy latest backend to Render');
+        if (mounted) {
+          _showVoiceUnavailable(
+            'Server needs update. Deploy latest backend on Render, then try again.',
+          );
+        }
+        return;
       }
+
+      final roomCode = widget.roomCode.trim().toUpperCase();
+      debugPrint('[LiveKit] HTTP POST /voice/token room=$roomCode');
+      final response = await ApiClient.post('/voice/token', {'roomCode': roomCode});
+      final body = jsonDecode(response.body) as Map<String, dynamic>;
+      if (response.statusCode == 200 && body['success'] == true) {
+        if (mounted) _handleVoiceTokenPayload(body);
+        return;
+      }
+      final msg = body['message']?.toString() ?? 'Voice token request failed';
+      debugPrint('[LiveKit] HTTP token failed: $msg');
+      if (mounted) _showVoiceUnavailable(msg);
+    } catch (e) {
+      debugPrint('[LiveKit] HTTP fallback error: $e');
+      if (mounted) _showVoiceUnavailable('Network error requesting voice token');
+    }
+  }
+
+  void _toggleVoiceChat() {
+    AudioService.instance.playButtonClick();
+    final voiceState = ref.read(voiceChatProvider);
+    if (voiceState.status == VoiceChatStatus.connected ||
+        voiceState.status == VoiceChatStatus.connecting) {
+      TtsService.instance.speak('Disable voice chat');
+      _addHistoryMessage('Disabling voice chat globally...');
+      ref.read(voiceChatProvider.notifier).disconnect();
     } else {
-      TtsService.instance.speak("Connect voice chat");
-      _addHistoryMessage('Connecting to audio channel...');
-      ref.read(socketServiceProvider).requestVoiceToken(widget.roomCode);
+      _requestVoiceToken();
     }
   }
 
@@ -871,8 +912,40 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
   @override
   Widget build(BuildContext context) {
     final size = MediaQuery.of(context).size;
+    final voiceState = ref.watch(voiceChatProvider);
+    final isVoiceConnected = voiceState.status == VoiceChatStatus.connected;
+    final isVoiceMuted = voiceState.isMuted;
+    final activeSpeaker = voiceState.activeSpeaker;
     // Calculate max available height for the board based on screen height
-    final double reservedHeight = _isVoiceConnected ? 380.0 : 340.0;
+    // Listen to voice state failures to alert the user with a standard SnackBar
+    ref.listen<VoiceChatState>(voiceChatProvider, (previous, next) {
+      if (next.status == VoiceChatStatus.permissionDenied && previous?.status != VoiceChatStatus.permissionDenied) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Microphone permission required for voice chat'),
+            backgroundColor: AppColors.ludoRed,
+            duration: Duration(seconds: 3),
+          ),
+        );
+      } else if (next.status == VoiceChatStatus.failed && previous?.status != VoiceChatStatus.failed) {
+        final errorMsg = next.lastError ??
+            (next.logs.isNotEmpty
+                ? (next.logs.last.contains(']')
+                    ? next.logs.last.split(']').last.trim()
+                    : next.logs.last)
+                : 'Unknown audio error');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Voice chat connection failed: $errorMsg'),
+            backgroundColor: AppColors.ludoRed,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
+    });
+
+    // Recalculate reserved height dynamically to scale board down slightly on smaller screens and prevent any 0.818 pixels overflow
+    final double reservedHeight = !_isOffline ? (isVoiceConnected ? 440.0 : 400.0) : 320.0;
     final double maxBoardHeight = size.height - reservedHeight;
     final boardSize = min(min(size.width - 32, 450.0), max(200.0, maxBoardHeight));
 
@@ -923,17 +996,36 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
           },
         ),
         actions: [
-          IconButton(
-            icon: Icon(
-              _isVoiceConnected 
-                  ? (_isVoiceMuted ? Icons.mic_off : Icons.mic) 
-                  : Icons.volume_up, 
-              color: _isVoiceConnected 
-                  ? (_isVoiceMuted ? AppColors.ludoRed : AppColors.ludoGreen) 
-                  : AppColors.textSecondary
+          // Developer secret trigger: Long-press chat or double-tap to toggle voice logs overlay panel
+          if (!_isOffline)
+            GestureDetector(
+              onLongPress: () {
+                setState(() {
+                  _showVoiceDebugPanel = !_showVoiceDebugPanel;
+                });
+              },
+              child: IconButton(
+                icon: voiceState.status == VoiceChatStatus.connecting
+                    ? const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                        ),
+                      )
+                    : Icon(
+                        isVoiceConnected
+                            ? (isVoiceMuted ? Icons.mic_off : Icons.mic)
+                            : Icons.mic,
+                        color: isVoiceConnected
+                            ? (isVoiceMuted ? AppColors.ludoRed : AppColors.ludoGreen)
+                            : AppColors.textSecondary,
+                      ),
+                onPressed: _toggleVoiceChat,
+                tooltip: 'Toggle Voice Chat',
+              ),
             ),
-            onPressed: _toggleVoiceChat,
-          ),
           Builder(
             builder: (ctx) => IconButton(
               icon: const Icon(Icons.chat_bubble_outline_rounded),
@@ -950,17 +1042,29 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         child: Column(
           children: [
             // Voice status indicator row
-            if (_isVoiceConnected)
+            if (!_isOffline && voiceState.status != VoiceChatStatus.disconnected)
               Container(
                 color: AppColors.surface,
                 padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
                 child: Row(
                   children: [
-                    const Icon(Icons.record_voice_over, color: AppColors.ludoGreen, size: 16),
+                    Icon(
+                      voiceState.status == VoiceChatStatus.connecting
+                          ? Icons.sync
+                          : (isVoiceConnected
+                              ? (isVoiceMuted ? Icons.mic_off : Icons.mic)
+                              : Icons.mic_off_outlined),
+                      color: voiceState.status == VoiceChatStatus.connecting
+                          ? AppColors.gold
+                          : (isVoiceConnected
+                              ? (isVoiceMuted ? AppColors.ludoRed : AppColors.ludoGreen)
+                              : AppColors.textSecondary),
+                      size: 16,
+                    ),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        _activeSpeaker != null ? '$_activeSpeaker is speaking...' : 'Voice Chat Active (LiveKit)',
+                        _voiceStatusLabel(voiceState, activeSpeaker),
                         style: const TextStyle(fontSize: 12, color: AppColors.textSecondary),
                       ),
                     ),
@@ -1032,10 +1136,120 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
               ),
             ),
 
+            if (!_isOffline) ...[
+              const SizedBox(height: 8),
+              // Persistent Push-To-Talk (Hold-to-Talk) Button
+              _buildHoldToTalkButton(voiceState),
+              const SizedBox(height: 12),
+            ],
+
             // Bottom Dice roller deck
             _buildDiceConsoleDeck(),
             
             const SizedBox(height: 16),
+            
+            // Temporary Developer Logs Debug overlay (safely layered without affecting core gameplay)
+            if (_showVoiceDebugPanel)
+              Container(
+                height: 220,
+                width: double.infinity,
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.black.withOpacity(0.92),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.redAccent.withOpacity(0.6), width: 1.5),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          '🎙️ HARDWARE AUDIO PIPELINE AUDIT PANEL',
+                          style: TextStyle(fontFamily: 'Courier', fontSize: 11, color: Colors.redAccent, fontWeight: FontWeight.bold),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            setState(() {
+                              _showVoiceDebugPanel = false;
+                            });
+                          },
+                          child: const Icon(Icons.close, size: 16, color: Colors.white),
+                        )
+                      ],
+                    ),
+                    const Divider(color: Colors.white24, height: 8),
+                    
+                    // Hardware pipeline values grid
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.05),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Table(
+                        columnWidths: const {
+                          0: FlexColumnWidth(1.2),
+                          1: FlexColumnWidth(1.0),
+                          2: FlexColumnWidth(1.2),
+                          3: FlexColumnWidth(1.0),
+                        },
+                        children: [
+                          TableRow(
+                            children: [
+                              const Text('Voice Connect:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text(voiceState.status == VoiceChatStatus.connected ? 'YES' : 'NO', style: TextStyle(color: voiceState.status == VoiceChatStatus.connected ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                              const Text('Room Name:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text(ref.read(voiceChatProvider.notifier).currentRoomName, style: const TextStyle(color: Colors.cyan, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                            ],
+                          ),
+                          TableRow(
+                            children: [
+                              const Text('Mic Capturing:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text(ref.read(voiceChatProvider.notifier).hasLocalAudioTrack ? 'YES' : 'NO', style: TextStyle(color: ref.read(voiceChatProvider.notifier).hasLocalAudioTrack ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                              const Text('Audio Pubbed:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text(ref.read(voiceChatProvider.notifier).isLocalAudioTrackPublished ? 'YES' : 'NO', style: TextStyle(color: ref.read(voiceChatProvider.notifier).isLocalAudioTrackPublished ? Colors.green : Colors.red, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                            ],
+                          ),
+                          TableRow(
+                            children: [
+                              const Text('Remote Subs:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text(ref.read(voiceChatProvider.notifier).hasRemoteAudioSubscribed ? 'YES' : 'NO', style: TextStyle(color: ref.read(voiceChatProvider.notifier).hasRemoteAudioSubscribed ? Colors.green : Colors.grey, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                              const Text('Peer Count:', style: TextStyle(color: Colors.white70, fontSize: 10, fontFamily: 'Courier')),
+                              Text('${ref.read(voiceChatProvider.notifier).participantCount}', style: const TextStyle(color: Colors.amber, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier')),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    const Text('LOG STREAM:', style: TextStyle(color: Colors.grey, fontSize: 9, fontFamily: 'Courier', fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 2),
+                    Expanded(
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: Colors.black.withOpacity(0.4),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: ListView.builder(
+                          itemCount: voiceState.logs.length,
+                          reverse: true,
+                          itemBuilder: (context, idx) {
+                            final reversedList = voiceState.logs.reversed.toList();
+                            return Text(
+                              reversedList[idx],
+                              style: const TextStyle(fontFamily: 'Courier', fontSize: 9, color: Colors.lightGreen),
+                            );
+                          },
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
           ],
         ),
       ),
@@ -1106,7 +1320,63 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
                 ),
               ),
               
-              // Level Badge overlay
+              // Real-Time Microphone state status indicator for teammate sync
+              Consumer(
+                builder: (context, ref, _) {
+                  final voiceState = ref.watch(voiceChatProvider);
+                  // Resolve identity/name to show correct icon state
+                  final bool isLocal = name == 'You' || (ref.read(authProvider).user?.name == name);
+                  ParticipantVoiceState? pState;
+                  
+                  if (isLocal) {
+                    pState = voiceState.participants.values.firstWhere(
+                      (p) => p.name == 'You',
+                      orElse: () => ParticipantVoiceState(identity: '', name: 'You', isMuted: voiceState.isMuted),
+                    );
+                  } else {
+                    pState = voiceState.participants.values.firstWhere(
+                      (p) => p.name.trim().toLowerCase() == name.trim().toLowerCase() || p.identity == name,
+                      orElse: () => voiceState.participants.values.firstWhere(
+                        (p) => p.name != 'You',
+                        orElse: () => ParticipantVoiceState(identity: '', name: name, isMuted: true),
+                      ),
+                    );
+                  }
+                  
+                  final isMuted = pState.isMuted;
+                  final isSpeaking = pState.isSpeaking && voiceState.status == VoiceChatStatus.connected;
+                  
+                  if (voiceState.status != VoiceChatStatus.connected) return const SizedBox.shrink();
+
+                  return Positioned(
+                    top: -2,
+                    left: -2,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: isMuted ? AppColors.ludoRed : AppColors.ludoGreen,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.white, width: 1),
+                        boxShadow: [
+                          if (isSpeaking)
+                            BoxShadow(
+                              color: AppColors.ludoGreen.withOpacity(0.6),
+                              blurRadius: 6,
+                              spreadRadius: 2,
+                            ),
+                        ],
+                      ),
+                      child: Icon(
+                        isMuted ? Icons.mic_off : Icons.mic,
+                        size: 10,
+                        color: Colors.white,
+                      ),
+                    ),
+                  );
+                },
+              ),
+              
+              // Level Star overlay
               Positioned(
                 bottom: -2,
                 right: -2,
@@ -1318,6 +1588,203 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     });
 
     return Stack(children: items);
+  }
+
+  String _voiceStatusLabel(VoiceChatState voiceState, String? activeSpeaker) {
+    switch (voiceState.status) {
+      case VoiceChatStatus.connecting:
+        return 'Connecting to voice chat...';
+      case VoiceChatStatus.connected:
+        if (activeSpeaker != null) return '$activeSpeaker is speaking...';
+        return voiceState.isMuted ? 'Voice connected — muted' : 'Voice connected — mic on';
+      case VoiceChatStatus.failed:
+        return 'Voice offline';
+      case VoiceChatStatus.permissionDenied:
+        return 'Microphone permission required';
+      case VoiceChatStatus.disconnected:
+        return 'Voice offline';
+    }
+  }
+
+  Widget _buildHoldToTalkButton(VoiceChatState voiceState) {
+    final isVoiceConnected = voiceState.status == VoiceChatStatus.connected;
+    final isConnecting = voiceState.status == VoiceChatStatus.connecting;
+
+    if (isConnecting) {
+      return Container(
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          color: const Color(0xFF1E293B).withOpacity(0.8),
+          border: Border.all(color: AppColors.gold.withOpacity(0.5), width: 1.5),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const SizedBox(
+              width: 22,
+              height: 22,
+              child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.gold),
+            ),
+            const SizedBox(width: 12),
+            Text(
+              'CONNECTING...',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    if (!isVoiceConnected) {
+      return GestureDetector(
+        onTap: _toggleVoiceChat,
+        child: Container(
+          width: double.infinity,
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          padding: const EdgeInsets.symmetric(vertical: 14),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(18),
+            color: const Color(0xFF1E293B).withOpacity(0.8),
+            border: Border.all(
+              color: const Color(0xFFEF4444).withOpacity(0.3),
+              width: 1.5,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.mic_off_outlined, color: Color(0xFFEF4444), size: 24),
+              const SizedBox(width: 12),
+              Text(
+                'VOICE OFFLINE (TAP TO ENABLE)',
+                style: GoogleFonts.outfit(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 14,
+                  letterSpacing: 1.0,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return GestureDetector(
+      onTap: () async {
+        AudioService.instance.playButtonClick();
+        await ref.read(voiceChatProvider.notifier).toggleMute();
+        if (mounted) {
+          setState(() {
+            _isHoldingMic = !ref.read(voiceChatProvider).isMuted;
+          });
+        }
+      },
+      onTapDown: (_) async {
+        AudioService.instance.playButtonClick();
+        setState(() {
+          _isHoldingMic = true;
+        });
+        TtsService.instance.speak("Speaking live");
+        _addHistoryMessage('Unmuted! Speaking live...');
+        await ref.read(voiceChatProvider.notifier).setMuted(false);
+      },
+      onTapUp: (_) async {
+        setState(() {
+          _isHoldingMic = false;
+        });
+        _addHistoryMessage('Muted! Stopped talking.');
+        await ref.read(voiceChatProvider.notifier).setMuted(true);
+      },
+      onTapCancel: () async {
+        setState(() {
+          _isHoldingMic = false;
+        });
+        await ref.read(voiceChatProvider.notifier).setMuted(true);
+      },
+      onLongPressStart: (_) async {
+        if (!_isHoldingMic) {
+          AudioService.instance.playButtonClick();
+          setState(() {
+            _isHoldingMic = true;
+          });
+          TtsService.instance.speak("Speaking live");
+          _addHistoryMessage('Unmuted! Speaking live...');
+          await ref.read(voiceChatProvider.notifier).setMuted(false);
+        }
+      },
+      onLongPressEnd: (_) async {
+        setState(() {
+          _isHoldingMic = false;
+        });
+        _addHistoryMessage('Muted! Stopped talking.');
+        await ref.read(voiceChatProvider.notifier).setMuted(true);
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: double.infinity,
+        margin: const EdgeInsets.symmetric(horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 14),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          gradient: _isHoldingMic
+              ? const LinearGradient(
+                  colors: [Color(0xFFEF4444), Color(0xFFF97316)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                )
+              : const LinearGradient(
+                  colors: [Color(0xFF1E293B), Color(0xFF0F172A)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+          border: Border.all(
+            color: _isHoldingMic ? Colors.white : const Color(0xFFEF4444).withOpacity(0.4),
+            width: 2.0,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: _isHoldingMic
+                  ? const Color(0xFFEF4444).withOpacity(0.6)
+                  : Colors.black38,
+              blurRadius: _isHoldingMic ? 16 : 6,
+              spreadRadius: _isHoldingMic ? 3 : 0,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              _isHoldingMic ? Icons.mic : Icons.mic_none_outlined,
+              color: Colors.white,
+              size: 24,
+            ),
+            const SizedBox(width: 12),
+            Text(
+              _isHoldingMic || !voiceState.isMuted
+                  ? '🎤 MIC ON (TAP OR RELEASE TO MUTE)'
+                  : 'MUTED — HOLD TO TALK OR TAP TO UNMUTE',
+              style: GoogleFonts.outfit(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+                letterSpacing: 1.0,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildDiceConsoleDeck() {

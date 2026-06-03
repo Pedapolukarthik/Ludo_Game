@@ -6,6 +6,7 @@ const leaderboardRoutes = require('./routes/leaderboardRoutes');
 const rewardRoutes = require('./routes/rewardRoutes');
 const tournamentRoutes = require('./routes/tournamentRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const voiceRoutes = require('./routes/voiceRoutes');
 
 const app = express();
 
@@ -20,6 +21,7 @@ app.use('/api/leaderboard', leaderboardRoutes);
 app.use('/api/rewards', rewardRoutes);
 app.use('/api/tournaments', tournamentRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/voice', voiceRoutes);
 
 // Health check endpoint
 app.get('/health', (req, res) => {
