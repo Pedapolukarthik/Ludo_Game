@@ -267,7 +267,11 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
 
     if (_possibleMoves.isEmpty) {
       _addHistoryMessage('$_activeColor has no moves. Passing turn...');
-      Future.delayed(const Duration(milliseconds: 1500), _passOfflineTurn);
+      // Only schedule turn passage automatically for human players.
+      // For the bot, _executeBotPawnSelection is already scheduled and will handle passing the turn.
+      if (!(_activeColor == 'Green' && !_isLocalMultiplayer)) {
+        Future.delayed(const Duration(milliseconds: 1500), _passOfflineTurn);
+      }
     }
   }
 
