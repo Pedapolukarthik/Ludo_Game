@@ -3,7 +3,7 @@ const { generateVoiceToken } = require('./src/services/livekitService');
 
 async function test() {
   try {
-    const token = await generateVoiceToken('TEST_ROOM', 'test_identity', 'Test User');
+    const { token } = await generateVoiceToken('TEST_ROOM', 'test_identity', 'Test User');
     console.log('Token payload verified:');
     const base64Url = token.split('.')[1];
     const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
