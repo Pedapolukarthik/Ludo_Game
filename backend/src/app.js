@@ -15,12 +15,19 @@ app.use(cors());
 app.use(express.json());
 
 // REST Routes
+console.log('[Route Load] Registering /api/auth routes');
 app.use('/api/auth', authRoutes);
+console.log('[Route Load] Registering /api/users routes');
 app.use('/api/users', userRoutes);
+console.log('[Route Load] Registering /api/leaderboard routes');
 app.use('/api/leaderboard', leaderboardRoutes);
+console.log('[Route Load] Registering /api/rewards routes');
 app.use('/api/rewards', rewardRoutes);
+console.log('[Route Load] Registering /api/tournaments routes');
 app.use('/api/tournaments', tournamentRoutes);
+console.log('[Route Load] Registering /api/admin routes');
 app.use('/api/admin', adminRoutes);
+console.log('[Route Load] Registering /api/voice routes');
 app.use('/api/voice', voiceRoutes);
 
 // Health check endpoint

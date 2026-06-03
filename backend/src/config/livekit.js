@@ -106,11 +106,10 @@ if (!config.usingEnvCredentials) {
   );
 }
 
-module.exports = {
-  ...config,
-  sanitizeCredential,
-  normalizeLiveKitWsUrl,
-  validateLiveKitCredentials,
-  verifyAccessToken,
-  getRoomServiceClient,
-};
+config.sanitizeCredential = sanitizeCredential;
+config.normalizeLiveKitWsUrl = normalizeLiveKitWsUrl;
+config.validateLiveKitCredentials = validateLiveKitCredentials;
+config.verifyAccessToken = verifyAccessToken;
+config.getRoomServiceClient = getRoomServiceClient;
+
+module.exports = config;
