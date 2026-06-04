@@ -149,14 +149,11 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
         _diceController.forward();
         _playSfx('roll');
 
-        final localColor = _getLocalPlayerColor();
-        final String speakText = (data['color'] == localColor) ? 'You rolled ${data['value']}' : '${data['color']} rolled ${data['value']}';
-        TtsService.instance.speak(speakText);
-        
-        if (data['forfeit'] == true) {
-          _addHistoryMessage('$_activeColor forfeits turn (consecutive sixes limit)');
-        } else if (_possibleMoves.isEmpty && _activeColor == _getLocalPlayerColor()) {
-          _addHistoryMessage('You rolled $_diceValue but have no moves');
+        // Speak ONLY the player color and dice number
+        final String? color = data['color'];
+        final val = data['value'];
+        if (color != null && val != null) {
+          TtsService.instance.speak('$color $val');
         }
       }
     };
@@ -164,23 +161,62 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     socket.onPawnMoved = (data) {
       if (mounted) {
         _playSfx('move');
-        if (data['isKill'] == true) _playSfx('capture');
+        if (data['isKill'] == true) {
+          _playSfx('capture');
+        }
         if (data['isGoal'] == true) _playSfx('goal');
         
         final move = data['move'];
         if (move != null && move['to'] != null) {
           final int toStep = move['to'];
-          if (toStep < 57 && _isStepSafe(_activeColor, toStep)) {
+          if (toStep < 57 && _isStepSafe(data['color'], toStep)) {
             _playSfx('safe');
           }
         }
         
         _parseGameState(data['gameState']);
+
+        // Speak only new history messages from this move (stop searching at the turn's roll message)
+        final history = data['gameState']['history'] as List<dynamic>?;
+        if (history != null && history.isNotEmpty) {
+          try {
+            final List<String> newMessagesToSpeak = [];
+            for (final h in history.reversed) {
+              final text = h['text'] as String?;
+              if (text == null) continue;
+              final lowerText = text.toLowerCase();
+              
+              // Stop looking back if we encounter a roll or forfeit event of this turn
+              if (lowerText.contains('rolled') || lowerText.contains('forfeited')) {
+                break;
+              }
+              
+              if (lowerText.contains('captured') ||
+                  lowerText.contains('reached 3 points') ||
+                  lowerText.contains('won') ||
+                  lowerText.contains('extra roll')) {
+                newMessagesToSpeak.add(text);
+              }
+            }
+            
+            // Speak new events chronologically
+            for (final msg in newMessagesToSpeak.reversed) {
+              TtsService.instance.speak(msg);
+            }
+          } catch (_) {
+            // Ignore lookup/cast errors
+          }
+        }
       }
     };
 
     socket.onTurnChanged = (data) {
       if (mounted) {
+        setState(() {
+          if (data['possibleMoves'] != null) {
+            _possibleMoves = List<Map<String, dynamic>>.from(data['possibleMoves']);
+          }
+        });
         _parseGameState(data['gameState']);
       }
     };
@@ -266,7 +302,11 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     });
 
     if (_possibleMoves.isEmpty) {
-      _addHistoryMessage('$_activeColor has no moves. Passing turn...');
+      final activePlayer = _findPlayerByColor(_activeColor);
+      final String activePlayerName = activePlayer['name'] ?? _activeColor;
+      final noMovesMsg = '$activePlayerName has no moves. Passing turn...';
+      _addHistoryMessage(noMovesMsg);
+      TtsService.instance.speak(noMovesMsg);
       // Only schedule turn passage automatically for human players.
       // For the bot, _executeBotPawnSelection is already scheduled and will handle passing the turn.
       if (!(_activeColor == 'Green' && !_isLocalMultiplayer)) {
@@ -290,9 +330,9 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final activePlayer = _findPlayerByColor(_activeColor);
     final String activePlayerName = activePlayer['name'] ?? _activeColor;
     final String speakText = '$activePlayerName rolled $_diceValue';
+    
+    _addHistoryMessage(speakText);
     TtsService.instance.speak(speakText);
-
-    _addHistoryMessage('$activePlayerName rolled a $_diceValue');
 
     if (_diceValue == 6) {
       // Local consecutive check is omitted for simplicity in practice, or capped
@@ -311,6 +351,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     
     final move = _possibleMoves.firstWhere((m) => m['pawnId'] == pawnId, orElse: () => <String, dynamic>{});
     if (move.isEmpty) return;
+
+    final int goalCountBefore = _pawns[_activeColor]!.where((s) => s == 57).length;
 
     setState(() {
       _rollState = 'idle';
@@ -332,11 +374,55 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
               if (_getGeneralTrackIndex(oppColor, oppStep) == targetIdx) {
                 oppPawns[i] = 0;
                 isKill = true;
-                _addHistoryMessage('$_activeColor captured $oppColor\'s pawn!');
+                final activePlayerName = _findPlayerByColor(_activeColor)['name'] ?? _activeColor;
+                final oppPlayerName = _findPlayerByColor(oppColor)['name'] ?? oppColor;
+                final killText = '$activePlayerName captured $oppPlayerName\'s pawn!';
+                _addHistoryMessage(killText);
+                TtsService.instance.speak(killText);
               }
             }
           }
         });
+      }
+    }
+
+    // Check if player reached 3 points (exactly 3 pawns in goal now, but was 2 before)
+    final int goalCountAfter = _pawns[_activeColor]!.where((s) => s == 57).length;
+    if (goalCountBefore == 2 && goalCountAfter == 3) {
+      final remainingPawnId = _pawns[_activeColor]!.indexWhere((s) => s != 57);
+      if (remainingPawnId != -1) {
+        final currentStep = _pawns[_activeColor]![remainingPawnId];
+        final bonusStep = min(57, currentStep + 4);
+        setState(() {
+          _pawns[_activeColor]![remainingPawnId] = bonusStep;
+        });
+
+        final activePlayerName = _findPlayerByColor(_activeColor)['name'] ?? _activeColor;
+        final bonusMsg = '$activePlayerName reached 3 points! Pawn ${remainingPawnId + 1} automatically moved 4 steps.';
+        _addHistoryMessage(bonusMsg);
+        TtsService.instance.speak(bonusMsg);
+
+        // Capturing check for bonus step
+        if (bonusStep >= 1 && bonusStep <= 51) {
+          final targetIdx = _getGeneralTrackIndex(_activeColor, bonusStep);
+          if (targetIdx != null && !_isSafeTrackIndex(targetIdx)) {
+            _pawns.forEach((oppColor, oppPawns) {
+              if (oppColor != _activeColor) {
+                for (int i = 0; i < 4; i++) {
+                  final oppStep = oppPawns[i];
+                  if (_getGeneralTrackIndex(oppColor, oppStep) == targetIdx) {
+                    oppPawns[i] = 0;
+                    isKill = true;
+                    final oppPlayerName = _findPlayerByColor(oppColor)['name'] ?? oppColor;
+                    final killText = '$activePlayerName captured $oppPlayerName\'s pawn!';
+                    _addHistoryMessage(killText);
+                    TtsService.instance.speak(killText);
+                  }
+                }
+              }
+            });
+          }
+        }
       }
     }
 
@@ -365,7 +451,9 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
       });
       final activePlayer = _findPlayerByColor(_activeColor);
       final String activePlayerName = activePlayer['name'] ?? _activeColor;
-      _addHistoryMessage('$activePlayerName gets an extra roll!');
+      final extraRollMsg = '$activePlayerName gets an extra roll!';
+      _addHistoryMessage(extraRollMsg);
+      TtsService.instance.speak(extraRollMsg);
       if (_activeColor == 'Green' && !_isLocalMultiplayer) {
         Future.delayed(const Duration(milliseconds: 1000), _rollOfflineDice);
       }
@@ -911,6 +999,38 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     );
   }
 
+  void _showAbandonMatchDialog() {
+    AudioService.instance.playButtonClick();
+    TtsService.instance.speak("Abandon match dialog");
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Abandon Match?'),
+        content: const Text('Quitting this match counts as a forfeit. Entry fee coins will not be returned.'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              AudioService.instance.playButtonClick();
+              TtsService.instance.speak("Resume");
+              Navigator.pop(ctx);
+            },
+            child: const Text('Resume Game'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              AudioService.instance.playButtonClick();
+              TtsService.instance.speak("Forfeit and leave");
+              Navigator.pop(ctx);
+              context.go('/home');
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.ludoRed),
+            child: const Text('Exit Match'),
+          )
+        ],
+      ),
+    );
+  }
+
   // --- Rendering UI Layout ---
 
   @override
@@ -953,52 +1073,27 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
     final double maxBoardHeight = size.height - reservedHeight;
     final boardSize = min(min(size.width - 32, 450.0), max(200.0, maxBoardHeight));
 
-    return Scaffold(
-      backgroundColor: AppColors.background,
-      appBar: AppBar(
-        title: Text(
-          _isLocalMultiplayer
-              ? 'LOCAL MULTIPLAYER'
-              : (_isOffline ? 'OFFLINE PRACTICE VS AI' : 'MULTIPLAYER ROOM: ${widget.roomCode}'),
-          style: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.exit_to_app_rounded),
-          onPressed: () {
-            AudioService.instance.playButtonClick();
-            TtsService.instance.speak("Abandon match dialog");
-            // Confirm quit dialog
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Abandon Match?'),
-                content: const Text('Quitting this match counts as a forfeit. Entry fee coins will not be returned.'),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      AudioService.instance.playButtonClick();
-                      TtsService.instance.speak("Resume");
-                      Navigator.pop(ctx);
-                    },
-                    child: const Text('Resume'),
-                  ),
-                  ElevatedButton(
-                    onPressed: () {
-                      AudioService.instance.playButtonClick();
-                      TtsService.instance.speak("Forfeit and leave");
-                      Navigator.pop(ctx);
-                      context.go('/home');
-                    },
-                    style: ElevatedButton.styleFrom(backgroundColor: AppColors.ludoRed),
-                    child: const Text('Forfeit & Leave'),
-                  )
-                ],
-              ),
-            );
-          },
-        ),
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _showAbandonMatchDialog();
+      },
+      child: Scaffold(
+        backgroundColor: AppColors.background,
+        appBar: AppBar(
+          title: Text(
+            _isLocalMultiplayer
+                ? 'LOCAL MULTIPLAYER'
+                : (_isOffline ? 'OFFLINE PRACTICE VS AI' : 'MULTIPLAYER ROOM: ${widget.roomCode}'),
+            style: const TextStyle(fontFamily: 'Outfit', fontSize: 16, fontWeight: FontWeight.bold),
+          ),
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.exit_to_app_rounded),
+            onPressed: _showAbandonMatchDialog,
+          ),
         actions: [
           // Developer secret trigger: Long-press chat or double-tap to toggle voice logs overlay panel
           if (!_isOffline)
@@ -1257,7 +1352,8 @@ class _GameRoomScreenState extends ConsumerState<GameRoomScreen> with TickerProv
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 
   Widget _buildPlayerBadge(String color, bool isTurn) {

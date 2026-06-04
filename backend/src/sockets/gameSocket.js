@@ -2,7 +2,7 @@ const Room = require('../models/Room');
 const User = require('../models/User');
 const Match = require('../models/Match');
 const Chat = require('../models/Chat');
-const { initializeGame, handleDiceRoll, handlePawnMove } = require('../services/gameEngine');
+const { initializeGame, handleDiceRoll, handlePawnMove, getPossibleMoves } = require('../services/gameEngine');
 const { selectBotMove } = require('../services/botService');
 const { generateVoiceToken } = require('../services/livekitService');
 const livekitConfig = require('../config/livekit');
@@ -37,6 +37,39 @@ function registerGameSocket(io) {
 
   io.on('connection', (socket) => {
     console.log(`User connected to Socket.IO: ${socket.user.name} (${socket.id})`);
+
+    // Check if player has an active game in progress to reconnect them
+    for (const [roomCode, gameState] of activeGames.entries()) {
+      const player = gameState.players.find(p => p.userId === socket.user._id.toString());
+      if (player) {
+        console.log(`Reconnecting user ${socket.user.name} to active game room ${roomCode}`);
+        socket.join(roomCode);
+        player.active = true;
+
+        const moves = gameState.diceValue ? getPossibleMoves(gameState, gameState.activeColor, gameState.diceValue) : [];
+        
+        // Trigger auto-navigation on client if they are on Home Screen
+        socket.emit('match_found', {
+          roomCode,
+          players: gameState.players,
+          gameState
+        });
+        
+        // Send current game state and moves to the reconnecting player to sync their UI
+        socket.emit('turn_changed', {
+          activeColor: gameState.activeColor,
+          possibleMoves: moves,
+          gameState
+        });
+        
+        // Broadcast updated state to other players in the room
+        socket.to(roomCode).emit('turn_changed', {
+          activeColor: gameState.activeColor,
+          gameState
+        });
+        break;
+      }
+    }
 
     // --- Lobby & Chat Events ---
     
@@ -265,17 +298,17 @@ function registerGameSocket(io) {
     socket.on('roll_dice', async ({ roomCode }) => {
       const gameState = activeGames.get(roomCode);
       if (!gameState) return socket.emit('error', 'Game state not found');
-
       try {
         const activePlayer = gameState.players.find(p => p.color === gameState.activeColor);
         if (!activePlayer || activePlayer.userId !== socket.user._id.toString()) {
           return socket.emit('error', 'Not your turn');
         }
 
+        const rollingColor = gameState.activeColor;
         const { roll, forfeit, possibleMoves } = handleDiceRoll(gameState, gameState.activeColor);
         
         io.to(roomCode).emit('dice_rolled', {
-          color: gameState.activeColor,
+          color: rollingColor,
           value: roll,
           forfeit,
           possibleMoves,
@@ -305,17 +338,17 @@ function registerGameSocket(io) {
     socket.on('move_pawn', async ({ roomCode, pawnId }) => {
       const gameState = activeGames.get(roomCode);
       if (!gameState) return socket.emit('error', 'Game state not found');
-
       try {
         const activePlayer = gameState.players.find(p => p.color === gameState.activeColor);
         if (!activePlayer || activePlayer.userId !== socket.user._id.toString()) {
           return socket.emit('error', 'Not your turn');
         }
 
+        const movingColor = gameState.activeColor;
         const result = handlePawnMove(gameState, gameState.activeColor, parseInt(pawnId));
         
         io.to(roomCode).emit('pawn_moved', {
-          color: gameState.activeColor,
+          color: movingColor,
           pawnId,
           move: result.move,
           isKill: result.isKill,
